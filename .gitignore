@@ -1,0 +1,8 @@
+*.txt
+
+*.exe
+vendor/
+
+*.pgo
+*.pprof
+*.prof
