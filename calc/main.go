@@ -9,7 +9,7 @@ import (
 	"log"
 	"math"
 	"os"
-	_ "runtime/pprof"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"strings"
@@ -21,19 +21,19 @@ import (
 )
 
 type WeatherStationInfo struct {
-    name string
-    min float64
-    max float64
-    acc float64
-    count int
+	name  string
+	min   float64
+	max   float64
+	acc   float64
+	count int
 }
 
 func main() {
-    start := time.Now()
+	start := time.Now()
 
-    if len(os.Args) < 3 {
-        log.Fatalln("Required source and dest path")
-    }
+	if len(os.Args) < 3 {
+		log.Fatalln("Required source and dest path")
+	}
 
 	out, err := os.Create(os.Args[len(os.Args)-1])
 	if err != nil {
@@ -41,317 +41,301 @@ func main() {
 	}
 	defer out.Close()
 
-    in, err := os.Open(os.Args[len(os.Args)-2])
-    if err != nil {
+	in, err := os.Open(os.Args[len(os.Args)-2])
+	if err != nil {
 		log.Fatalln(err)
 	}
 	defer in.Close()
 
-    results := compute(in)
-    printResult(out, results)
+	results := compute(in)
+	result := mergeSortMulti(results)
+	printResult(out, result)
 
-    fmt.Println(time.Since(start))
+	fmt.Println(time.Since(start))
 }
 
 const (
-    CHAN_SIZE = 2048
-    BUFFER_SIZE = 2048 * 2048 * 16
+	CHAN_SIZE   = 2048
+	BUFFER_SIZE = 2048 * 2048 * 16
 )
 
 func compute(in io.Reader) [][]WeatherStationInfo {
-    n := int('Z'-'A'+1)
+	n := int('Z' - 'A')
 
-    results := make([][]WeatherStationInfo, n)
+	leftovers := make(chan []byte, CHAN_SIZE)
+	var leftoverWG sync.WaitGroup
+	leftoverWG.Add(1)
 
-    consumers := make([]chan []byte, n)
-    leftovers := make(chan []byte, CHAN_SIZE)
-    var consumerWG sync.WaitGroup
-    consumerWG.Add(n+1)
+    results := make([][]WeatherStationInfo, n+1)
+	readLock := new(sync.Mutex)
 
-    readLock := new(sync.Mutex)
+	var readerWG sync.WaitGroup
+	readerWG.Add(n)
 
-    var readerWG sync.WaitGroup
-    readerWG.Add(n)
+	go func() {
+		rd, wr := io.Pipe()
+		br := bufio.NewReaderSize(rd, BUFFER_SIZE)
 
-    go func() {
-        rd, wr := io.Pipe()
-        br := bufio.NewReaderSize(rd, BUFFER_SIZE)
-        
-        go func() {
-            defer consumerWG.Done()
+		go func() {
+			defer leftoverWG.Done()
 
-            for {
-                line, err := br.ReadBytes('\n')
-                if err != nil && !errors.Is(err, io.EOF) {
+			m := make(map[uint64]WeatherStationInfo)
+
+			for {
+				line, err := br.ReadBytes('\n')
+				if err != nil {
+                    if errors.Is(err, io.EOF) {
+					    break
+                    }
                     log.Fatalln(err)
-                }
-    
-                if len(line) > 0 {
-                    dispatchLine(line, consumers)
-                }
-    
-                if err != nil {
-                    return
-                }
-            }
-        }()
-        
-        for lo := range leftovers {
-            wr.Write(lo)
-        }
-        wr.Close()
-    }()
-    
-    for i := range n {
-        consumers[i] = make(chan []byte, CHAN_SIZE)
+				}
 
-        go func() {
-            defer readerWG.Done()
+				if len(line) > 0 {
+                    if line[len(line)-1] == '\n' {
+                        line = line[:len(line)-1]
+                    }
 
-            for {
-                buf := make([]byte, BUFFER_SIZE)
+                    if len(line) > 0 {
+                        computeLine(line, m)
+                    }
+				}
+			}
 
-                readLock.Lock()                
-                read, err := in.Read(buf)
+			results[n] = computeResult(m)
+		}()
 
-                if err != nil && !errors.Is(err, io.EOF) {
-                    log.Fatalln(err)
-                }
+		for lo := range leftovers {
+			wr.Write(lo)
+		}
+		wr.Close()
+	}()
 
-                if read > 0 {
-                    func() {
-                        index := bytes.IndexByte(buf, '\n')
-                        if index == -1 {
-                            leftovers <- buf
-                            return
-                        }
+	for i := range n {
+		go func() {
+			defer readerWG.Done()
 
-                        leftovers <- buf[:index+1]
-                        buf = buf[index+1:]
+			m := make(map[uint64]WeatherStationInfo)
 
-                        index = bytes.LastIndexByte(buf, '\n')
-                        if index == -1 {
-                            leftovers <- buf
-                            return
-                        }
+			for {
+				buf := make([]byte, BUFFER_SIZE)
 
-                        leftovers <- buf[index+1:]
-                        buf = buf[:index+1]
-                    }()
-                    readLock.Unlock()
+				readLock.Lock()
+				read, err := in.Read(buf)
 
-                    dispatchLine(buf, consumers)
-                } else {
-                    readLock.Unlock()
-                }
+				if err != nil && !errors.Is(err, io.EOF) {
+					log.Fatalln(err)
+				}
 
-                if err != nil {
-                    // This is only if io.EOF
-                    break
-                }
-            }
-        }()
+				if read > 0 {
+					func() {
+						index := bytes.IndexByte(buf, '\n')
+						if index == -1 {
+							leftovers <- buf
+							return
+						}
 
-        go func() {
-            defer consumerWG.Done()
+						leftovers <- buf[:index+1]
+						buf = buf[index+1:]
 
-            m := make(map[uint64]WeatherStationInfo)
+						index = bytes.LastIndexByte(buf, '\n')
+						if index == -1 {
+							leftovers <- buf
+							return
+						}
 
-            for line := range consumers[i] {
-                computeLine(line, m)
-            }
+						leftovers <- buf[index+1:]
+						buf = buf[:index+1]
+					}()
+					readLock.Unlock()
 
-            values := maps.Values(m)
-            slices.SortFunc(values, func(x WeatherStationInfo, y WeatherStationInfo) int {
-                return strings.Compare(x.name, y.name)
-            })
+					computeChunk(buf, m)
+					results[i] = computeResult(m)
+				} else {
+					readLock.Unlock()
+				}
 
-            results[i] = values
-        }()
-    }
+				if err != nil {
+					// This is only if io.EOF
+					break
+				}
+			}
+		}()
+	}
 
-    readerWG.Wait()
-    for _, ch := range consumers {
-        close(ch)
-    }
-    close(leftovers)
-    consumerWG.Wait()
+	readerWG.Wait()
+	close(leftovers)
+	leftoverWG.Wait()
 
-    return results
+	return results
 }
 
-func dispatchLine(buf []byte, consumers []chan []byte) {
-    n := len(consumers)
+func computeChunk(buf []byte, m map[uint64]WeatherStationInfo) {
+	for {
+		index := bytes.IndexByte(buf, '\n')
+		if index == -1 {
+			break
+		}
 
-    for {
-        index := bytes.IndexRune(buf, '\n')
-        if index == -1 {
-            break
-        }
+		line := buf[:index]
+		buf = buf[index+1:]
 
-        line := buf[:index]
-        buf = buf[index+1:]
+		computeLine(line, m)
+	}
+}
 
-        worker := int(line[0]-'A')
-        if worker > n-1 {
-            worker = n-1
-        }
-        consumers[worker] <- line
-    }
+func computeResult(m map[uint64]WeatherStationInfo) []WeatherStationInfo {
+	values := maps.Values(m)
+	slices.SortFunc(values, func(x WeatherStationInfo, y WeatherStationInfo) int {
+		return strings.Compare(x.name, y.name)
+	})
+
+	return values
 }
 
 func computeLine(line []byte, result map[uint64]WeatherStationInfo) {
-    index := bytes.IndexRune(line, ';')
-    temp, err := strconv.ParseFloat(string(line[index+1:]), 64)
-    if err != nil {
-        log.Fatalln(string(line[:index]), err)
+	index := bytes.IndexByte(line, ';')
+    if index == -1 {
+        log.Printf("No index: len: %d\n", len(line))
+        debug.PrintStack()
+        os.Exit(1)
     }
+	temp, err := strconv.ParseFloat(string(line[index+1:]), 64)
+	if err != nil {
+		log.Fatalln(string(line[:index]), err)
+	}
 
-    var key [32]byte
-    hash := highwayhash.Sum64(line[:index], key[:])
+	var key [32]byte
+	hash := highwayhash.Sum64(line[:index], key[:])
 
-    info, found := result[hash]
-    if !found {
-        result[hash] = WeatherStationInfo{
-            name: string(line[:index]),
-            min: temp, max: temp,
-            acc: temp, count: 1,
-        }
-    } else {
-        if temp < info.min {
-            info.min = temp
-        }
-        if temp > info.max {
-            info.max = temp
-        }
+	info, found := result[hash]
+	if !found {
+		result[hash] = WeatherStationInfo{
+			name: string(line[:index]),
+			min:  temp, max: temp,
+			acc: temp, count: 1,
+		}
+	} else {
+		if temp < info.min {
+			info.min = temp
+		}
+		if temp > info.max {
+			info.max = temp
+		}
 
-        info.acc += temp
-        info.count++
+		info.acc += temp
+		info.count++
 
-        result[hash] = info
-    }
+		result[hash] = info
+	}
 }
 
-func printResult(out io.Writer, results [][]WeatherStationInfo) {
-    fmt.Fprint(out, "{\n")
-    first := true
-
-    for _, res := range results {
-        for _, x := range res {
-            if first {
-                first = false
-                fmt.Fprintf(out, "\t%s=%3.1f/%3.1f/%3.1f", x.name, x.min, math.Round(x.acc / float64(x.count)), x.max)
-            } else {
-                fmt.Fprintf(out, ",\n\t%s=%3.1f/%3.1f/%3.1f", x.name, x.min, math.Round(x.acc / float64(x.count)), x.max)
-            }
-        }
+func mergeSortMulti(results [][]WeatherStationInfo) []WeatherStationInfo {
+    if len(results) == 0 {
+        return nil
     }
-    fmt.Fprint(out, "\n}\n")
+    
+    if len(results) == 1 {
+        return results[0]
+    }
+
+	mid := len(results) / 2
+	return mergeMulti(results[:mid], results[mid:])
 }
 
-/*
+func mergeMulti(resultsA [][]WeatherStationInfo, resultsB [][]WeatherStationInfo) []WeatherStationInfo {
+	chA := make(chan []WeatherStationInfo)
+	chB := make(chan []WeatherStationInfo)
 
-if read != 0 {
-                    if len(leftover) > 0 {
-                        index := bytes.IndexRune(buf, '\n')
-                        
-                        if index == -1 {    
-                            worker := int(leftover[0]-'A')
-                            if worker > n-1 {
-                                worker = n-1
-                            }
-                            consumers[worker] <- leftover
-            
-                            leftover = buf
-                            continue
-                        }
-        
-                        leftover = append(leftover, buf[:index]...)
-                        buf = buf[index+1:]
-        
-                        worker := int(leftover[0]-'A')
-                        if worker > n-1 {
-                            worker = n-1
-                        }
-                        consumers[worker] <- leftover
-        
-                        leftover = nil
-                    }
-                    
-                    for {
-                        index := bytes.IndexRune(buf, '\n')
-                        if index == -1 {
-                            leftover = buf
-                            break
-                        }
-            
-                        line := buf[:index]
-                        buf = buf[index+1:]
-            
-                        worker := int(line[0]-'A')
-                        if worker > n-1 {
-                            worker = n-1
-                        }
-                        consumers[worker] <- line
-                    }
-                } else {
-                    readLock.Unlock()
-                }
+	go func() {
+		chA <- mergeSortMulti(resultsA)
+	}()
+	go func() {
+		chB <- mergeSortMulti(resultsB)
+	}()
 
-go func() {
-        defer func() {
-            for _, ch := range consumers {
-                close(ch)
+	resA := mergeSort(<-chA)
+	resB := mergeSort(<-chB)
+
+	res := make([]WeatherStationInfo, 0, len(resA)+len(resB))
+
+	var i, j int
+	for i < len(resA) && j < len(resB) {
+        switch strings.Compare(resA[i].name, resB[j].name) {
+        case -1:
+            res = append(res, resA[i])
+			i++
+        case 0:
+            x := resA[i]
+            y := resB[j]
+
+            if y.min < x.min {
+                x.min = y.min
             }
-        }()
-
-        var leftover []byte
-        for buf := range dispatcher {
-            readChan <- struct{}{}
-
-            if len(leftover) > 0 {
-                index := bytes.IndexRune(buf, '\n')
-                
-                if index == -1 {    
-                    worker := int(leftover[0]-'A')
-                    if worker > n-1 {
-                        worker = n-1
-                    }
-                    consumers[worker] <- leftover
-    
-                    leftover = buf
-                    continue
-                }
-
-                leftover = append(leftover, buf[:index]...)
-                buf = buf[index+1:]
-
-                worker := int(leftover[0]-'A')
-                if worker > n-1 {
-                    worker = n-1
-                }
-                consumers[worker] <- leftover
-
-                leftover = nil
+            if y.max > x.max {
+                x.max = y.max
             }
-            
-            for {
-                index := bytes.IndexRune(buf, '\n')
-                if index == -1 {
-                    leftover = buf
-                    break
-                }
-    
-                line := buf[:index]
-                buf = buf[index+1:]
-    
-                worker := int(line[0]-'A')
-                if worker > n-1 {
-                    worker = n-1
-                }
-                consumers[worker] <- line
-            }
+            x.acc += y.acc
+            x.count += y.count
+
+            res = append(res, x)
+            i++
+            j++
+        case 1:
+            res = append(res, resB[j])
+			j++
         }
-    }()
+	}
 
-*/
+    res = append(res, resA[i:]...)
+    res = append(res, resB[j:]...)
+
+    return res
+}
+
+func mergeSort(s []WeatherStationInfo) []WeatherStationInfo {
+    if len(s) < 2 {
+        return s
+    }
+    
+    mid := len(s) / 2
+    
+    a := mergeSort(s[:mid])
+    b := mergeSort(s[mid:])
+
+    return merge(a, b)
+}
+
+func merge(a []WeatherStationInfo, b []WeatherStationInfo) []WeatherStationInfo {
+    res := make([]WeatherStationInfo, 0, len(a) + len(b))
+    var i, j int
+
+    for i < len(a) && j < len(b) {
+        if a[i].name <= b[j].name {
+            res = append(res, a[i])
+            i++
+        } else {
+            res = append(res, b[j])
+            j++
+        }
+    }
+
+    res = append(res, a[i:]...)
+    res = append(res, b[j:]...)
+
+    return res
+}
+
+func printResult(out io.Writer, result []WeatherStationInfo) {
+	fmt.Fprint(out, "{\n")
+	first := true
+
+	for _, x := range result {
+		if first {
+			first = false
+			fmt.Fprintf(out, "\t%s=%3.1f/%3.1f/%3.1f", x.name, x.min, math.Round(x.acc/float64(x.count)), x.max)
+		} else {
+			fmt.Fprintf(out, ",\n\t%s=%3.1f/%3.1f/%3.1f", x.name, x.min, math.Round(x.acc/float64(x.count)), x.max)
+		}
+	}
+	fmt.Fprint(out, "\n}\n")
+}
