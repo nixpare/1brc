@@ -3,6 +3,8 @@ package main
 import (
 	"errors"
 	"fmt"
+	"hash"
+	"hash/fnv"
 	"io"
 	"log"
 	"os"
@@ -78,8 +80,9 @@ func main() {
         leftover = append(leftover, '\n')
     }
 
-    leftoverM := make(map[string]*WeatherStationInfo)
-    computeChunk(leftover, leftoverM)
+    leftoverM := make(map[uint64]*WeatherStationInfo)
+    h := fnv.New64a()
+    computeChunk(leftover, h, leftoverM)
     partials[len(partials)-1] = sortedValues(leftoverM)
 
 	result := mergeSortMulti(partials)
@@ -95,7 +98,8 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
         return nil
     }
 
-    m := make(map[string]*WeatherStationInfo)
+    m := make(map[uint64]*WeatherStationInfo)
+    h := fnv.New64a()
     
     f, err := os.OpenFile(filePath, os.O_RDONLY, 0)
     if err != nil {
@@ -137,7 +141,7 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
             copy(overflows[workerID*2-1], buf[:firstLineIndex])
         } else {
             leftover = append(leftover, buf[:firstLineIndex]...)
-            parseLine(leftover, m)
+            parseLine(leftover, h, m)
             leftover = leftover[:0]
         }
 
@@ -154,13 +158,13 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
             leftover = append(leftover, buf[lastLineIndex+1:]...)
         }
 
-        computeChunk(buf[firstLineIndex+1:lastLineIndex+1], m)
+        computeChunk(buf[firstLineIndex+1:lastLineIndex+1], h, m)
     }
     
     return sortedValues(m)
 }
 
-func sortedValues(m map[string]*WeatherStationInfo) []*WeatherStationInfo {
+func sortedValues(m map[uint64]*WeatherStationInfo) []*WeatherStationInfo {
     values := maps.Values(m)
     slices.SortFunc(values, func(a *WeatherStationInfo, b *WeatherStationInfo) int {
         return strings.Compare(a.name, b.name)
@@ -168,17 +172,17 @@ func sortedValues(m map[string]*WeatherStationInfo) []*WeatherStationInfo {
     return values
 }
 
-func computeChunk(chunk []byte, m map[string]*WeatherStationInfo) {
+func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo) {
     var nextStart int
     for i, b := range chunk {
         if b == '\n' {
-            parseLine(chunk[nextStart:i], m)
+            parseLine(chunk[nextStart:i], h, m)
             nextStart = i+1
         }
     }
 }
 
-func parseLine(line []byte, m map[string]*WeatherStationInfo) {
+func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo) {
     if len(line) == 0 {
         return
     }
@@ -191,7 +195,10 @@ func parseLine(line []byte, m map[string]*WeatherStationInfo) {
         }
     }
 
-    name := string(line[:splitIndex])
+    h.Reset()
+    h.Write(line[:splitIndex])
+    nameHash := h.Sum64()
+
     var temp int16
     var exp int16 = 1
 loop:
@@ -225,10 +232,10 @@ loop:
         exp *= 10
     }
 
-    value, ok := m[name]
+    value, ok := m[nameHash]
     if !ok {
-        m[name] = &WeatherStationInfo{
-            name: name,
+        m[nameHash] = &WeatherStationInfo{
+            name: string(line[:splitIndex]),
             min: temp, max: temp,
             acc: int64(temp), count: 1,
         }
