@@ -13,8 +13,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/exp/maps"
 )
 
 type WeatherStationInfo struct {
@@ -46,7 +44,11 @@ func main() {
 	}
 
     fileSize := inInfo.Size()
-    workers := runtime.NumCPU()
+    workers := runtime.NumCPU() * 10
+    if fileSize < BUFFER_SIZE {
+        workers = 1
+    }
+
     var chunkSize int64
     if workers > 1 {
         chunkSize = fileSize / int64(workers-1)
@@ -82,6 +84,7 @@ func main() {
 
     leftoverM := make(map[uint64]*WeatherStationInfo)
     h := fnv.New64a()
+    
     computeChunk(leftover, h, leftoverM)
     partials[len(partials)-1] = sortedValues(leftoverM)
 
@@ -165,7 +168,10 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
 }
 
 func sortedValues(m map[uint64]*WeatherStationInfo) []*WeatherStationInfo {
-    values := maps.Values(m)
+    values := make([]*WeatherStationInfo, 0, len(m))
+    for _, value := range m {
+        values = append(values, value)
+    }
     slices.SortFunc(values, func(a *WeatherStationInfo, b *WeatherStationInfo) int {
         return strings.Compare(a.name, b.name)
     })
@@ -203,32 +209,17 @@ func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo) {
     var exp int16 = 1
 loop:
     for i := len(line)-1; i > splitIndex; i-- {
-        switch line[i] {
-        case '.':
+        b := line[i]
+
+        if b == '.' {
             continue loop
-        case '-':
-            temp *= -1
-        case '0':
-        case '1':
-            temp += 1 * exp
-        case '2':
-            temp += 2 * exp
-        case '3':
-            temp += 3 * exp
-        case '4':
-            temp += 4 * exp
-        case '5':
-            temp += 5 * exp
-        case '6':
-            temp += 6 * exp
-        case '7':
-            temp += 7 * exp
-        case '8':
-            temp += 8 * exp
-        case '9':
-            temp += 9 * exp
         }
-        
+        if b == '-' {
+            temp *= -1
+            break loop
+        }
+
+        temp += int16(b - '0') * exp
         exp *= 10
     }
 
@@ -249,4 +240,19 @@ loop:
         value.acc += int64(temp)
         value.count++
     }
+}
+
+func printResult(out io.Writer, result []*WeatherStationInfo) {
+	fmt.Fprint(out, "{\n")
+	first := true
+
+	for _, x := range result {
+		if first {
+			first = false
+			fmt.Fprintf(out, "\t%s=%.1f/%.1f/%.1f", x.name, float32(x.min) / 10.0, float64(x.acc) / 10.0 / float64(x.count), float32(x.max) / 10.0)
+		} else {
+			fmt.Fprintf(out, ",\n\t%s=%.1f/%.1f/%.1f", x.name, float32(x.min) / 10.0, float64(x.acc) / 10.0 / float64(x.count), float32(x.max) / 10.0)
+		}
+	}
+	fmt.Fprint(out, "\n}\n")
 }

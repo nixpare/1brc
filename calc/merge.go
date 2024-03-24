@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"io"
 	"strings"
 )
 
@@ -100,19 +98,4 @@ func merge(a []*WeatherStationInfo, b []*WeatherStationInfo) []*WeatherStationIn
 	res = append(res, b[j:]...)
 
 	return res
-}
-
-func printResult(out io.Writer, result []*WeatherStationInfo) {
-	fmt.Fprint(out, "{\n")
-	first := true
-
-	for _, x := range result {
-		if first {
-			first = false
-			fmt.Fprintf(out, "\t%s=%3.1f/%3.1f/%3.1f", x.name, float32(x.min) / 10.0, float64(x.acc) / 10.0 / float64(x.count), float32(x.max) / 10.0)
-		} else {
-			fmt.Fprintf(out, ",\n\t%s=%3.1f/%3.1f/%3.1f", x.name, float32(x.min) / 10.0, float64(x.acc) / 10.0 / float64(x.count), float32(x.max) / 10.0)
-		}
-	}
-	fmt.Fprint(out, "\n}\n")
 }
