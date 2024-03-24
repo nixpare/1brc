@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 	"log"
-	"math"
 	"os"
 	"slices"
 	"strconv"
@@ -78,9 +77,9 @@ func dummy(measurementsPath string, resultPath string) {
         value := results[key]
         if first {
             first = false
-            fmt.Fprintf(out, "\t%s=%.1f/%.1f/%.1f", key, value.min, math.Round(value.acc / float64(value.count)), value.max)
+            fmt.Fprintf(out, "\t%s=%.1f/%.1f/%.1f", key, value.min, value.acc / float64(value.count), value.max)
         } else {
-            fmt.Fprintf(out, ",\n\t%s=%.1f/%.1f/%.1f", key, value.min, math.Round(value.acc / float64(value.count)), value.max)
+            fmt.Fprintf(out, ",\n\t%s=%.1f/%.1f/%.1f", key, value.min, value.acc / float64(value.count), value.max)
         }
     }
     fmt.Fprint(out, "\n}\n")
