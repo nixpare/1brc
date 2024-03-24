@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+    BUFFER_SIZE = 2048 * 2048
+    WORKERS_MULTIPLIER = 20
+)
+
 type WeatherStationInfo struct {
 	name  string
 	min   int16
@@ -44,7 +49,7 @@ func main() {
 	}
 
     fileSize := inInfo.Size()
-    workers := runtime.NumCPU() * 10
+    workers := runtime.NumCPU() * WORKERS_MULTIPLIER
     if fileSize < BUFFER_SIZE {
         workers = 1
     }
@@ -93,8 +98,6 @@ func main() {
 
 	fmt.Println(time.Since(start))
 }
-
-const BUFFER_SIZE = 2048 * 2048
 
 func compute(filePath string, from int64, to int64, workerID int, workers int, overflows [][]byte) []*WeatherStationInfo {
     if from == to {
