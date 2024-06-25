@@ -1,47 +1,49 @@
 package main
 
-import (
-	"strings"
-)
+func mergeMatrix(partials [][]*WeatherStationInfo) []*WeatherStationInfo {
+    var n int
+	for _, v := range partials {
+		n += len(v)
+	}
 
-func mergeSortMulti(results [][]*WeatherStationInfo) []*WeatherStationInfo {
-    if len(results) == 0 {
-        return nil
-    }
-    
-    if len(results) == 1 {
-        return results[0]
-    }
+	result := make([]*WeatherStationInfo, n)
+	tmp := make([][]*WeatherStationInfo, len(partials) / 2 + 1)
 
-	mid := len(results) / 2
-	return mergeMulti(results[:mid], results[mid:])
+	for len(partials) > 1 {
+		var from int
+		for i := 0; i+1 < len(partials); i += 2 {
+			length := len(partials[i]) + len(partials[i+1])
+			n := mergeMatrixInto(partials[i], partials[i+1], result[from:from+length])
+			
+			partials[i] = result[from:from+n]
+			from += length
+		}
+
+		tmp = tmp[:0]
+		for i := 0; i < len(partials); i += 2 {
+			tmp = append(tmp, partials[i])
+		}
+
+		partials = partials[:len(tmp)]
+		copy(partials, tmp)
+	}
+
+	return partials[0]
 }
 
-func mergeMulti(resultsA [][]*WeatherStationInfo, resultsB [][]*WeatherStationInfo) []*WeatherStationInfo {
-	chA := make(chan []*WeatherStationInfo)
-	chB := make(chan []*WeatherStationInfo)
-
-	go func() {
-		chA <- mergeSortMulti(resultsA)
-	}()
-	go func() {
-		chB <- mergeSortMulti(resultsB)
-	}()
-
-	resA := mergeSort(<-chA)
-	resB := mergeSort(<-chB)
-
-	res := make([]*WeatherStationInfo, 0, len(resA)+len(resB))
-
-	var i, j int
-	for i < len(resA) && j < len(resB) {
-		switch strings.Compare(resA[i].name, resB[j].name) {
+func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*WeatherStationInfo) int {
+	var i, j, k int
+	for i < len(a) && j < len(b) {
+		switch a[i].Compare(b[j]) {
 		case -1:
-			res = append(res, resA[i])
+			into[k] = a[i]
 			i++
+		case 1:
+			into[k] = b[j]
+			j++
 		case 0:
-			x := resA[i]
-			y := resB[j]
+			x := a[i]
+			y := b[j]
 
 			if y.min < x.min {
 				x.min = y.min
@@ -52,50 +54,23 @@ func mergeMulti(resultsA [][]*WeatherStationInfo, resultsB [][]*WeatherStationIn
 			x.acc += y.acc
 			x.count += y.count
 
-			res = append(res, x)
+			into[k] = x
 			i++
 			j++
-		case 1:
-			res = append(res, resB[j])
-			j++
 		}
+
+		k++
 	}
 
-	res = append(res, resA[i:]...)
-	res = append(res, resB[j:]...)
-
-	return res
-}
-
-func mergeSort(s []*WeatherStationInfo) []*WeatherStationInfo {
-	if len(s) < 2 {
-		return s
+	for i < len(a) {
+		into[k] = a[i]
+		i++; k++
 	}
 
-	mid := len(s) / 2
-
-	a := mergeSort(s[:mid])
-	b := mergeSort(s[mid:])
-
-	return merge(a, b)
-}
-
-func merge(a []*WeatherStationInfo, b []*WeatherStationInfo) []*WeatherStationInfo {
-	res := make([]*WeatherStationInfo, 0, len(a)+len(b))
-	var i, j int
-
-	for i < len(a) && j < len(b) {
-		if a[i].name <= b[j].name {
-			res = append(res, a[i])
-			i++
-		} else {
-			res = append(res, b[j])
-			j++
-		}
+	for j < len(b) {
+		into[k] = b[j]
+		j++; k++
 	}
 
-	res = append(res, a[i:]...)
-	res = append(res, b[j:]...)
-
-	return res
+	return k
 }

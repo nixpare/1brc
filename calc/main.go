@@ -9,10 +9,11 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/nixpare/sorting"
 )
 
 const (
@@ -26,6 +27,10 @@ type WeatherStationInfo struct {
 	max   int16
 	acc   int64
 	count int
+}
+
+func (w *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
+    return strings.Compare(w.name, other.name)
 }
 
 func main() {
@@ -93,7 +98,7 @@ func main() {
     computeChunk(leftover, h, leftoverM)
     partials[len(partials)-1] = sortedValues(leftoverM)
 
-	result := mergeSortMulti(partials)
+	result := mergeMatrix(partials)
 	printResult(out, result)
 
 	fmt.Println(time.Since(start))
@@ -175,9 +180,7 @@ func sortedValues(m map[uint64]*WeatherStationInfo) []*WeatherStationInfo {
     for _, value := range m {
         values = append(values, value)
     }
-    slices.SortFunc(values, func(a *WeatherStationInfo, b *WeatherStationInfo) int {
-        return strings.Compare(a.name, b.name)
-    })
+    sorting.MergeSortUnstable(values)
     return values
 }
 
@@ -250,7 +253,7 @@ func printResult(out io.Writer, result []*WeatherStationInfo) {
 	first := true
 
 	for _, x := range result {
-		if first {
+        if first {
 			first = false
 			fmt.Fprintf(out, "\t%s=%.1f/%.1f/%.1f", x.name, float32(x.min) / 10.0, float64(x.acc) / 10.0 / float64(x.count), float32(x.max) / 10.0)
 		} else {
