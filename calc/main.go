@@ -9,11 +9,12 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/nixpare/sorting"
+	"github.com/nixpare/mem"
 )
 
 const (
@@ -22,31 +23,34 @@ const (
 )
 
 type WeatherStationInfo struct {
-	name  string
+	name  mem.String
 	min   int16
 	max   int16
 	acc   int64
 	count int
 }
 
-func (w *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
-    return strings.Compare(w.name, other.name)
+func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
+    return strings.Compare(string(wsi.name), string(other.name))
 }
 
 func main() {
-	start := time.Now()
+    start := time.Now()
+
+    /* debug.SetGCPercent(-1)
+    debug.SetMemoryLimit(math.MaxInt64) */
 
 	if len(os.Args) < 3 {
 		log.Fatalln("Required source and dest path")
 	}
 
-	out, err := os.Create(os.Args[len(os.Args)-1])
+	out, err := os.Create(os.Args[2])
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer out.Close()
 
-    inFilePath := os.Args[len(os.Args)-2]
+    inFilePath := os.Args[1]
 
     inInfo, err := os.Stat(inFilePath)
     if err != nil {
@@ -55,6 +59,7 @@ func main() {
 
     fileSize := inInfo.Size()
     workers := runtime.NumCPU() * WORKERS_MULTIPLIER
+
     if fileSize < BUFFER_SIZE {
         workers = 1
     }
@@ -66,11 +71,25 @@ func main() {
         chunkSize = fileSize
     }
 
-    var wg sync.WaitGroup
-    partials := make([][]*WeatherStationInfo, workers+1)
-    overflows := make([][]byte, workers*2-2)
-    wg.Add(workers)
+    partials := mem.NewSlice[mem.Slice[*WeatherStationInfo]](workers+1, workers+1)
+    defer func() {
+        for _, wsi := range partials[0] {
+            deallocWSI(wsi)
+        }
+        partials[0].Free()
+        partials.Free()
+    }()
 
+    overflows := mem.NewSlice[mem.Slice[byte]](workers*2-2, workers*2-2)
+    defer func() {
+        for _, v := range overflows {
+            v.Free()
+        }
+        overflows.Free()
+    }()
+    
+    var wg sync.WaitGroup
+    wg.Add(workers)
     for i := range workers {
         from := chunkSize*int64(i)
         to := from + chunkSize
@@ -85,11 +104,12 @@ func main() {
     }
     wg.Wait()
 
-    leftover := make([]byte, 0)
+    leftover := mem.NewSlice[byte](0, 128)
+    defer leftover.Free()
     for i := 0; i < len(overflows); i += 2 {
-        leftover = append(leftover, overflows[i]...)
-        leftover = append(leftover, overflows[i+1]...)
-        leftover = append(leftover, '\n')
+        leftover.Append(overflows[i]...)
+        leftover.Append(overflows[i+1]...)
+        leftover.Append('\n')
     }
 
     leftoverM := make(map[uint64]*WeatherStationInfo)
@@ -101,10 +121,11 @@ func main() {
 	result := mergeMatrix(partials)
 	printResult(out, result)
 
-	fmt.Println(time.Since(start))
+    end := time.Since(start)
+	fmt.Println(end)
 }
 
-func compute(filePath string, from int64, to int64, workerID int, workers int, overflows [][]byte) []*WeatherStationInfo {
+func compute(filePath string, from int64, to int64, workerID int, workers int, overflows mem.Slice[mem.Slice[byte]]) mem.Slice[*WeatherStationInfo] {
     if from == to {
         return nil
     }
@@ -124,7 +145,9 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
     }
 
     var buf [BUFFER_SIZE]byte
-    leftover := make([]byte, 0, 128)
+    var leftoverStack [128]byte
+    leftover := leftoverStack[:]
+    leftover = leftover[:0]
 
     times := (to-from) / BUFFER_SIZE
     var read int
@@ -135,36 +158,43 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
             size = to - from - int64(read)
         }
 
-        n, err := f.Read(buf[:size])
+        fBuf := buf[:size]
+        n, err := f.Read(fBuf)
         if err != nil && !errors.Is(err, io.EOF) {
             panic(err)
         }
         read += n
 
         var firstLineIndex int
-        for ; firstLineIndex < n ; firstLineIndex++ {
+        for ; ; firstLineIndex++ {
             if buf[firstLineIndex] == '\n' {
                 break
             }
         }
 
         if workerID != 0 && i == 0 {
-            copy(overflows[workerID*2-1], buf[:firstLineIndex])
+            o := mem.NewSlice[byte](firstLineIndex, firstLineIndex)
+            copy(o, buf[:firstLineIndex])
+
+            overflows[workerID*2-1] = o
         } else {
             leftover = append(leftover, buf[:firstLineIndex]...)
             parseLine(leftover, h, m)
             leftover = leftover[:0]
         }
 
-        var lastLineIndex int = n-1
-        for ; lastLineIndex > firstLineIndex ; lastLineIndex-- {
+        var lastLineIndex int
+        for lastLineIndex = n-1 ; ; lastLineIndex-- {
             if buf[lastLineIndex] == '\n' {
                 break
             }
         }
 
         if workerID != workers-1 && i == times {
-            copy(overflows[workerID*2], buf[lastLineIndex+1:])
+            o := mem.NewSlice[byte](len(buf) - lastLineIndex+1, len(buf) - lastLineIndex+1)
+            copy(o, buf[lastLineIndex+1:])
+            
+            overflows[workerID*2] = o
         } else {
             leftover = append(leftover, buf[lastLineIndex+1:]...)
         }
@@ -176,11 +206,13 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, o
 }
 
 func sortedValues(m map[uint64]*WeatherStationInfo) []*WeatherStationInfo {
-    values := make([]*WeatherStationInfo, 0, len(m))
+    values := mem.NewSlice[*WeatherStationInfo](0, len(m))
     for _, value := range m {
-        values = append(values, value)
+        values.Append(value)
     }
-    sorting.MergeSortUnstable(values)
+    slices.SortFunc(values, func(a, b *WeatherStationInfo) int {
+        return a.Compare(b)
+    })
     return values
 }
 
@@ -215,36 +247,36 @@ func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo) {
     var exp int16 = 1
 loop:
     for i := len(line)-1; i > splitIndex; i-- {
-        b := line[i]
-
-        if b == '.' {
+        switch line[i] {
+        case '.':
             continue loop
-        }
-        if b == '-' {
+        case '-':
             temp *= -1
             break loop
+        default:
+            temp += int16(line[i] - '0') * exp
+            exp *= 10
         }
-
-        temp += int16(b - '0') * exp
-        exp *= 10
     }
 
-    value, ok := m[nameHash]
+    x, ok := m[nameHash]
     if !ok {
-        m[nameHash] = &WeatherStationInfo{
-            name: string(line[:splitIndex]),
+        wsi := mem.New[WeatherStationInfo]()
+        *wsi = WeatherStationInfo{
+            name: mem.StringFromGO(string(line[:splitIndex])),
             min: temp, max: temp,
             acc: int64(temp), count: 1,
         }
+        m[nameHash] = wsi
     } else {
-        if temp < value.min {
-            value.min = temp
+        if temp < x.min {
+            x.min = temp
         }
-        if temp > value.max {
-            value.max = temp
+        if temp > x.max {
+            x.max = temp
         }
-        value.acc += int64(temp)
-        value.count++
+        x.acc += int64(temp)
+        x.count++
     }
 }
 
@@ -261,4 +293,9 @@ func printResult(out io.Writer, result []*WeatherStationInfo) {
 		}
 	}
 	fmt.Fprint(out, "\n}\n")
+}
+
+func deallocWSI(wsi *WeatherStationInfo) {
+    wsi.name.Free()
+	mem.FreeObj(wsi)
 }
