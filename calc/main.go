@@ -18,11 +18,12 @@ import (
 )
 
 const (
-    BUFFER_SIZE = 2048 * 2048
-    WORKERS_MULTIPLIER = 20
+    BUFFER_SIZE = 1024 * 1024 * 4
+    WORKERS_MULTIPLIER = 1//20
 
-    ARENA_SINGLE_ALLOC = 2048
-    ARENA_MULTI_ALLOC = 2048 * 2048 * 8
+    ARENA_SINGLE_ALLOC = 1024 * 256
+    //ARENA_MULTI_ALLOC = 1024 * 1024 * 8
+    ARENA_MAIN_MULTI_ALLOC = 1024 * 1024 * 512
 )
 
 type WeatherStationInfo struct {
@@ -40,15 +41,10 @@ func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
 func main() {
     start := time.Now()
 
-    mainArena := NewArena(ARENA_SINGLE_ALLOC, ARENA_MULTI_ALLOC)
-    arenas := []*Arena{ mainArena }
-
+    arena := NewArena(ARENA_SINGLE_ALLOC, ARENA_MAIN_MULTI_ALLOC)
     defer func() {
-        for i, arena := range arenas {
-            fmt.Println(i)
-            arena.Free()
-        }
-        time.Sleep(time.Second * 30)
+        fmt.Printf("%d %d\n", len(arena.single), len(arena.multi))
+        arena.Free()
     }()
 
 	if len(os.Args) < 3 {
@@ -82,8 +78,8 @@ func main() {
         chunkSize = fileSize
     }
 
-    partials := mem.NewSlice[mem.Slice[*WeatherStationInfo]](workers+1, workers+1, mainArena.AllocN)
-    overflows := mem.NewSlice[mem.Slice[byte]](workers*2-2, workers*2-2, mainArena.AllocN)
+    partials := mem.NewSlice[mem.Slice[*WeatherStationInfo]](workers+1, workers+1, arena.AllocN)
+    overflows := mem.NewSlice[mem.Slice[byte]](workers*2-2, workers*2-2, arena.AllocN)
     
     var wg sync.WaitGroup
     wg.Add(workers)
@@ -94,9 +90,6 @@ func main() {
             to = fileSize
         }
 
-        arena := NewArena(ARENA_SINGLE_ALLOC, ARENA_MULTI_ALLOC)
-        arenas = append(arenas, arena)
-
         go func() {
             defer wg.Done()
             partials[i] = compute(inFilePath, from, to, i, workers, arena, overflows)
@@ -104,21 +97,21 @@ func main() {
     }
     wg.Wait()
 
-    leftover := mem.NewSlice[byte](0, 128, mainArena.AllocN)
+    leftover := mem.NewSlice[byte](0, 128, arena.AllocN)
 
     for i := 0; i < len(overflows); i += 2 {
-        leftover.Append(nil, mainArena.AllocN, overflows[i]...)
-        leftover.Append(nil, mainArena.AllocN, overflows[i+1]...)
-        leftover.Append(nil, mainArena.AllocN, '\n')
+        leftover.Append(nil, arena.AllocN, overflows[i]...)
+        leftover.Append(nil, arena.AllocN, overflows[i+1]...)
+        leftover.Append(nil, arena.AllocN, '\n')
     }
 
     leftoverM := make(map[uint64]*WeatherStationInfo)
     h := fnv.New64a()
     
-    computeChunk(leftover, h, leftoverM, mainArena)
-    partials[len(partials)-1] = sortedValues(leftoverM, mainArena)
+    computeChunk(leftover, h, leftoverM, arena)
+    partials[len(partials)-1] = sortedValues(leftoverM, arena)
 
-	result := mergeMatrix(mem.ToSliceMatrix(partials), mainArena)
+	result := mergeMatrix(mem.ToSliceMatrix(partials), arena)
 	printResult(out, result)
 
     end := time.Since(start)

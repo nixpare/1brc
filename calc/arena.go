@@ -1,27 +1,31 @@
 package main
 
 import (
+	"fmt"
+	"sync"
 	"unsafe"
 
 	"github.com/nixpare/mem"
 )
 
 type region struct {
-	start uintptr
+	start unsafe.Pointer
 	end uintptr
 	next uintptr
 }
 
 func newRegion(size uintptr) region {
-	p := uintptr(mem.Malloc(size))
-	if p == 0 {
+	p := mem.Malloc(size)
+	ptr := uintptr(p)
+	if ptr == 0 {
 		panic("arena: create new memory block failed")
 	}
+	fmt.Printf("NEW REGION %v\n", p)
 
 	return region{
 		start: p,
-		end: p + size,
-		next: p,
+		end: ptr + size,
+		next: ptr,
 	}
 }
 
@@ -44,7 +48,8 @@ func (r *region) allocate(n int, sizeof uintptr, alignof uintptr) uintptr {
 }
 
 func (r region) free() {
-	mem.Free(unsafe.Pointer(r.start))
+	fmt.Println(r.start)
+	mem.Free(r.start)
 }
 
 type Arena struct {
@@ -52,6 +57,7 @@ type Arena struct {
 	multi []region
 	singleAlloc uintptr
 	multiAlloc uintptr
+	m sync.Mutex
 }
 
 func NewArena(singleAlloc, multiAlloc uintptr) *Arena {
@@ -59,6 +65,9 @@ func NewArena(singleAlloc, multiAlloc uintptr) *Arena {
 }
 
 func (a *Arena) Alloc(sizeof, alignof uintptr) unsafe.Pointer {
+	a.m.Lock()
+	defer a.m.Unlock()
+
 	for i := range a.single {
 		ptr := a.single[i].allocate(1, sizeof, alignof)
 		if ptr != 0 {
@@ -77,6 +86,9 @@ func (a *Arena) Alloc(sizeof, alignof uintptr) unsafe.Pointer {
 }
 
 func (a *Arena) AllocN(n int, sizeof, alignof uintptr) unsafe.Pointer {
+	a.m.Lock()
+	defer a.m.Unlock()
+
 	for i := range a.multi {
 		ptr := a.multi[i].allocate(n, sizeof, alignof)
 		if ptr != 0 {
@@ -113,6 +125,9 @@ func (a *Arena) allocateMultiRegion(n int, sizeof uintptr) {
 }
 
 func (a *Arena) Free() {
+	a.m.Lock()
+	defer a.m.Unlock()
+
 	for _, r := range a.single {
 		r.free()
 	}
