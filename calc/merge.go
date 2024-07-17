@@ -2,24 +2,21 @@ package main
 
 import "github.com/nixpare/mem"
 
-func mergeMatrix(partials []mem.Slice[*WeatherStationInfo]) mem.Slice[*WeatherStationInfo] {
+func mergeMatrix(partials []mem.Slice[*WeatherStationInfo], arena *Arena) mem.Slice[*WeatherStationInfo] {
     var n int
 	for _, v := range partials {
 		n += len(v)
 	}
 
-	result := mem.NewSlice[*WeatherStationInfo](n, n)
+	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocN)
 
-	for j := 0; len(partials) > 1; j++ {
+	for len(partials) > 1 {
 		var from int
 		for i := 0; i+1 < len(partials); i += 2 {
 			a, b := partials[i], partials[i+1]
 			length := len(a) + len(b)
 			
 			n := mergeMatrixInto(a, b, result[from:from+length])
-			if j == 0 {
-				a.Free(); b.Free()
-			}
 
 			partials[i/2] = result[from:from+n]
 			from += length
@@ -61,10 +58,8 @@ func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*W
 			x.count += y.count
 
 			into[k] = x
-			//deallocWSI(y)
 
-			i++
-			j++
+			i++; j++
 		}
 
 		k++
