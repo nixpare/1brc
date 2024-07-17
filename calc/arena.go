@@ -48,7 +48,8 @@ func (r region) free() {
 }
 
 type Arena struct {
-	r []*region
+	single []*region
+	multi []*region
 	step uintptr
 }
 
@@ -57,43 +58,66 @@ func NewArena(allocStep uintptr) *Arena {
 }
 
 func (a *Arena) Alloc(sizeof, alignof uintptr) unsafe.Pointer {
-	return a.AllocN(1, sizeof, alignof)
-}
-
-func (a *Arena) AllocN(n int, sizeof, alignof uintptr) unsafe.Pointer {
-	if len(a.r) == 0 {
-		a.allocateRegion(n, sizeof)
-
-		ptr := a.r[0].allocate(n, sizeof, alignof)
-		if ptr == 0 {
-			panic("arena: alloc failed with new memory block")
+	for _, r := range a.single {
+		ptr := r.allocate(1, sizeof, alignof)
+		if ptr != 0 {
+			return unsafe.Pointer(ptr)
 		}
 	}
 
-	ptr := a.r[len(a.r)-1].allocate(n, sizeof, alignof)
+	a.allocateSingleRegion(sizeof)
+	
+	ptr := a.single[len(a.single)-1].allocate(1, sizeof, alignof)
 	if ptr == 0 {
-		a.r = append(a.r, newRegion(a.step))
-		ptr = a.r[len(a.r)-1].allocate(n, sizeof, alignof)
-		if ptr == 0 {
-			panic("arena: alloc failed with new memory block")
-		}
+		panic("arena: alloc failed with new memory block")
 	}
 
 	return unsafe.Pointer(ptr)
 }
 
-func (a *Arena) allocateRegion(n int, sizeof uintptr) {
-	step, size := a.step, uintptr(n+1) * sizeof
-	if step >= size {
-		a.r = append(a.r, newRegion(a.step))
-	} else {
-		a.r = append(a.r, newRegion(size))
+func (a *Arena) AllocN(n int, sizeof, alignof uintptr) unsafe.Pointer {
+	for _, r := range a.multi {
+		ptr := r.allocate(n, sizeof, alignof)
+		if ptr != 0 {
+			return unsafe.Pointer(ptr)
+		}
 	}
+
+	a.allocateMultiRegion(n, sizeof)
+	
+	ptr := a.multi[len(a.multi)-1].allocate(n, sizeof, alignof)
+	if ptr == 0 {
+		panic("arena: alloc failed with new memory block")
+	}
+
+	return unsafe.Pointer(ptr)
+}
+
+func (a *Arena) allocateSingleRegion(sizeof uintptr) {
+	step, memsize := a.step, uintptr(2) * sizeof
+	if step < memsize {
+		step = memsize
+	}
+
+	a.single = append(a.single, newRegion(step))
+}
+
+func (a *Arena) allocateMultiRegion(n int, sizeof uintptr) {
+	step, memsize := a.step, uintptr(n+1) * sizeof
+	if step < memsize {
+		step = memsize
+	}
+
+	a.multi = append(a.multi, newRegion(step))
 }
 
 func (a *Arena) Free() {
-	for _, r := range a.r {
+	for _, r := range a.single {
 		r.free()
 	}
-	a.r = nil
+	a.single = nil
+	for _, r := range a.multi {
+		r.free()
+	}
+	a.multi = nil
 }

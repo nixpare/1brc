@@ -9,21 +9,22 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/nixpare/mem"
+	"github.com/nixpare/sorting"
 )
 
 const (
     BUFFER_SIZE = 2048 * 2048
     WORKERS_MULTIPLIER = 20
+    ARENA_ALLOC_STEP = 1024 * 1024 * 64
 )
 
 type WeatherStationInfo struct {
-	name  string
+	name  mem.String
 	min   int16
 	max   int16
 	acc   int64
@@ -31,20 +32,21 @@ type WeatherStationInfo struct {
 }
 
 func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
-    return strings.Compare(wsi.name/* .String() */, wsi.name/* .String() */)
+    return strings.Compare(wsi.name.String(), other.name.String())
 }
-
-const ARENA_ALLOC_STEP = 1024 * 1024 * 64
 
 func main() {
     start := time.Now()
 
     mainArena := NewArena(ARENA_ALLOC_STEP)
     arenas := []*Arena{ mainArena }
+
     defer func() {
+       //time.Sleep(time.Second * 3)
         for _, arena := range arenas {
             arena.Free()
         }
+        //time.Sleep(time.Second * 3)
     }()
 
 	if len(os.Args) < 3 {
@@ -206,9 +208,8 @@ func sortedValues(m map[uint64]*WeatherStationInfo, arena *Arena) []*WeatherStat
     for _, value := range m {
         values.Append(nil, arena.AllocN, value)
     }
-    slices.SortFunc(values, func(a, b *WeatherStationInfo) int {
-        return a.Compare(b)
-    })
+
+    sorting.Sort(values)
     return values
 }
 
@@ -255,25 +256,27 @@ loop:
         }
     }
 
-    x, ok := m[nameHash]
+    wsi, ok := m[nameHash]
     if !ok {
-        wsi := mem.New[WeatherStationInfo](arena.Alloc)
+        name := string(line[:splitIndex])
+        wsi = mem.New[WeatherStationInfo](arena.Alloc)
+
         *wsi = WeatherStationInfo{
-            //name: mem.StringFromGO(string(line[:splitIndex]), arena.AllocN),
-            name: string(line[:splitIndex]),
+            name: mem.StringFromGO(name, arena.AllocN),
             min: temp, max: temp,
             acc: int64(temp), count: 1,
         }
+
         m[nameHash] = wsi
     } else {
-        if temp < x.min {
-            x.min = temp
+        if temp < wsi.min {
+            wsi.min = temp
         }
-        if temp > x.max {
-            x.max = temp
+        if temp > wsi.max {
+            wsi.max = temp
         }
-        x.acc += int64(temp)
-        x.count++
+        wsi.acc += int64(temp)
+        wsi.count++
     }
 }
 
