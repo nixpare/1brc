@@ -20,7 +20,9 @@ import (
 const (
     BUFFER_SIZE = 2048 * 2048
     WORKERS_MULTIPLIER = 20
-    ARENA_ALLOC_STEP = 1024 * 1024 * 64
+
+    ARENA_SINGLE_ALLOC = 2048
+    ARENA_MULTI_ALLOC = 2048 * 2048 * 8
 )
 
 type WeatherStationInfo struct {
@@ -32,21 +34,21 @@ type WeatherStationInfo struct {
 }
 
 func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
-    return strings.Compare(wsi.name.String(), other.name.String())
+    return strings.Compare(string(wsi.name), string(other.name))
 }
 
 func main() {
     start := time.Now()
 
-    mainArena := NewArena(ARENA_ALLOC_STEP)
+    mainArena := NewArena(ARENA_SINGLE_ALLOC, ARENA_MULTI_ALLOC)
     arenas := []*Arena{ mainArena }
 
     defer func() {
-       //time.Sleep(time.Second * 3)
-        for _, arena := range arenas {
+        for i, arena := range arenas {
+            fmt.Println(i)
             arena.Free()
         }
-        //time.Sleep(time.Second * 3)
+        time.Sleep(time.Second * 30)
     }()
 
 	if len(os.Args) < 3 {
@@ -92,7 +94,7 @@ func main() {
             to = fileSize
         }
 
-        arena := NewArena(ARENA_ALLOC_STEP)
+        arena := NewArena(ARENA_SINGLE_ALLOC, ARENA_MULTI_ALLOC)
         arenas = append(arenas, arena)
 
         go func() {
@@ -116,7 +118,7 @@ func main() {
     computeChunk(leftover, h, leftoverM, mainArena)
     partials[len(partials)-1] = sortedValues(leftoverM, mainArena)
 
-	result := mergeMatrix(partials, mainArena)
+	result := mergeMatrix(mem.ToSliceMatrix(partials), mainArena)
 	printResult(out, result)
 
     end := time.Since(start)
@@ -142,10 +144,8 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
         panic(err)
     }
 
-    var buf [BUFFER_SIZE]byte
-    var leftoverStack [128]byte
-    leftover := leftoverStack[:]
-    leftover = leftover[:0]
+    buf := mem.NewSlice[byte](BUFFER_SIZE, BUFFER_SIZE, arena.AllocN)
+    leftover := mem.NewSlice[byte](0, 128, arena.AllocN)
 
     times := (to-from) / BUFFER_SIZE
     var read int
