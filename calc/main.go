@@ -17,7 +17,7 @@ import (
 )
 
 const (
-    BUFFER_SIZE = 2048 * 2048 * 4
+    BUFFER_SIZE = 1024 * 1024
     WORKERS_MULTIPLIER = 20
 )
 
