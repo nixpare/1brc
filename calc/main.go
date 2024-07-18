@@ -17,7 +17,7 @@ import (
 )
 
 const (
-    BUFFER_SIZE = 2048 * 2048
+    BUFFER_SIZE = 2048 * 2048 * 4
     WORKERS_MULTIPLIER = 20
 )
 
@@ -180,7 +180,7 @@ func sortedValues(m map[uint64]*WeatherStationInfo) []*WeatherStationInfo {
     for _, value := range m {
         values = append(values, value)
     }
-    sorting.MergeSortUnstable(values)
+    sorting.Sort(values)
     return values
 }
 

@@ -1,2 +1,4 @@
 github.com/nixpare/sorting v0.0.0-20240620144319-7218ef349d91 h1:PBTL9Ow6r6xMcu5Rp3iwSrvXAE/M4wYYALWb5RYjmUc=
 github.com/nixpare/sorting v0.0.0-20240620144319-7218ef349d91/go.mod h1:ToAvH9ogmuKTfuH2i/r1VRSt5k0DdGGQIRqAidn5KSM=
+github.com/nixpare/sorting v1.1.0 h1:g/fMohZNpKxE4aMYhUyp3G+QmE2E7xg+7+zkgA1lgsQ=
+github.com/nixpare/sorting v1.1.0/go.mod h1:ToAvH9ogmuKTfuH2i/r1VRSt5k0DdGGQIRqAidn5KSM=

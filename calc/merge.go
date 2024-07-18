@@ -7,25 +7,26 @@ func mergeMatrix(partials [][]*WeatherStationInfo) []*WeatherStationInfo {
 	}
 
 	result := make([]*WeatherStationInfo, n)
-	tmp := make([][]*WeatherStationInfo, len(partials) / 2 + 1)
 
 	for len(partials) > 1 {
 		var from int
 		for i := 0; i+1 < len(partials); i += 2 {
-			length := len(partials[i]) + len(partials[i+1])
-			n := mergeMatrixInto(partials[i], partials[i+1], result[from:from+length])
-			
-			partials[i] = result[from:from+n]
-			from += length
+			a, b := partials[i], partials[i+1]
+			length := len(a) + len(b)
+
+			n := mergeMatrixInto(a, b, result[from:from+length])
+
+			partials[i/2] = result[from : from+n]
+			from += n
 		}
 
-		tmp = tmp[:0]
-		for i := 0; i < len(partials); i += 2 {
-			tmp = append(tmp, partials[i])
+		oldLen := len(partials)
+		if oldLen%2 == 1 {
+			partials[oldLen/2+1] = partials[oldLen-1]
+			partials = partials[:oldLen/2+1]
+		} else {
+			partials = partials[:oldLen/2]
 		}
-
-		partials = partials[:len(tmp)]
-		copy(partials, tmp)
 	}
 
 	return partials[0]
