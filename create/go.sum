@@ -1,4 +1,8 @@
 github.com/nixpare/broadcaster v1.2.0 h1:GOJ3sc6J1GvmOxtWn3G8GEd7CAYeoC0xNpRfPT76JNQ=
 github.com/nixpare/broadcaster v1.2.0/go.mod h1:IC56SeoQvQGqaqJ06HUN5zMlCLB2NoKNOXo2zNmsp7w=
+github.com/nixpare/broadcaster v1.2.1 h1:eit04tSQgKCBvF0lFOQKaMUdVGgIvgwkQdIhvilf+vg=
+github.com/nixpare/broadcaster v1.2.1/go.mod h1:IC56SeoQvQGqaqJ06HUN5zMlCLB2NoKNOXo2zNmsp7w=
 golang.org/x/exp v0.0.0-20240318143956-a85f2c67cd81 h1:6R2FC06FonbXQ8pK11/PDFY6N6LWlf9KlzibaCapmqc=
 golang.org/x/exp v0.0.0-20240318143956-a85f2c67cd81/go.mod h1:CQ1k9gNrJ50XIzaKCRR2hssIjF07kZFEiieALBM/ARQ=
+golang.org/x/exp v0.0.0-20240716175740-e3f259677ff7 h1:wDLEX9a7YQoKdKNQt88rtydkqDxeGaBUTnIYc3iG/mA=
+golang.org/x/exp v0.0.0-20240716175740-e3f259677ff7/go.mod h1:M4RDyNAINzryxdtnbRXRL/OHtkFuWGRjvuhBJpk2IlY=
