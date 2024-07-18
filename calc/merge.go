@@ -3,27 +3,27 @@ package main
 import "github.com/nixpare/mem"
 
 func mergeMatrix(partials [][]*WeatherStationInfo, arena *Arena) []*WeatherStationInfo {
-    var n int
+	var n int
 	for _, v := range partials {
 		n += len(v)
 	}
 
-	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocN)
+	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocSlice)
 
 	for len(partials) > 1 {
 		var from int
 		for i := 0; i+1 < len(partials); i += 2 {
 			a, b := partials[i], partials[i+1]
 			length := len(a) + len(b)
-			
+
 			n := mergeMatrixInto(a, b, result[from:from+length])
 
-			partials[i/2] = result[from:from+n]
+			partials[i/2] = result[from : from+n]
 			from += length
 		}
 
 		oldLen := len(partials)
-		if oldLen % 2 == 1 {
+		if oldLen%2 == 1 {
 			partials[oldLen/2+1] = partials[oldLen-1]
 			partials = partials[:oldLen/2+1]
 		} else {
@@ -59,7 +59,8 @@ func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*W
 
 			into[k] = x
 
-			i++; j++
+			i++
+			j++
 		}
 
 		k++
@@ -67,12 +68,14 @@ func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*W
 
 	for i < len(a) {
 		into[k] = a[i]
-		i++; k++
+		i++
+		k++
 	}
 
 	for j < len(b) {
 		into[k] = b[j]
-		j++; k++
+		j++
+		k++
 	}
 
 	return k
