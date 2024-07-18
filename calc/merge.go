@@ -8,7 +8,7 @@ func mergeMatrix(partials [][]*WeatherStationInfo, arena *Arena) []*WeatherStati
 		n += len(v)
 	}
 
-	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocSlice)
+	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocN)
 
 	for len(partials) > 1 {
 		var from int
