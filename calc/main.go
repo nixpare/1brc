@@ -18,12 +18,8 @@ import (
 )
 
 const (
-	BUFFER_SIZE        = 1024 * 1024 * 4
-	WORKERS_MULTIPLIER = 20
-
-	ARENA_OBJ_ALLOC   uintptr = 1024 * 1024 * 4
-	ARENA_STR_ALLOC   uintptr = 1024 * 1024
-	ARENA_SLICE_ALLOC uintptr = 1024 * 1024 * 1024
+    BUFFER_SIZE = 1024 * 1024 * 4
+    WORKERS_MULTIPLIER = 20
 )
 
 type WeatherStationInfo struct {
@@ -195,14 +191,14 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 	return sortedValues(m, arena)
 }
 
-func sortedValues(m map[uint64]*WeatherStationInfo, arena *Arena) []*WeatherStationInfo {
-	values := mem.NewSlice[*WeatherStationInfo](0, len(m), arena.AllocSlice)
-	for _, value := range m {
-		values.Append(nil, arena.AllocSlice, value)
-	}
-
-	sorting.Sort(values)
-	return values
+func sortedValues(m map[uint64]*WeatherStationInfo) []*WeatherStationInfo {
+    values := make([]*WeatherStationInfo, 0, len(m))
+    for _, value := range m {
+        values = append(values, value)
+    }
+    
+    sorting.Sort(values)
+    return values
 }
 
 func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *Arena) {

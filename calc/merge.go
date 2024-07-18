@@ -8,7 +8,7 @@ func mergeMatrix(partials [][]*WeatherStationInfo, arena *Arena) []*WeatherStati
 		n += len(v)
 	}
 
-	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocSlice)
+	result := make([]*WeatherStationInfo, n)
 
 	for len(partials) > 1 {
 		var from int
@@ -19,7 +19,7 @@ func mergeMatrix(partials [][]*WeatherStationInfo, arena *Arena) []*WeatherStati
 			n := mergeMatrixInto(a, b, result[from:from+length])
 
 			partials[i/2] = result[from : from+n]
-			from += length
+			from += n
 		}
 
 		oldLen := len(partials)
