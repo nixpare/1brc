@@ -2,7 +2,7 @@ package main
 
 import "github.com/nixpare/mem"
 
-func mergeMatrix(partials [][]*WeatherStationInfo, arena *Arena) []*WeatherStationInfo {
+func mergeMatrix(partials [][]*WeatherStationInfo, arena *mem.Arena) []*WeatherStationInfo {
 	var n int
 	for _, v := range partials {
 		n += len(v)

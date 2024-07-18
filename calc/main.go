@@ -41,7 +41,7 @@ func main() {
 
 	start := time.Now()
 
-	arena := NewArena(ARENA_ALLOC)
+	arena := mem.NewArena(ARENA_ALLOC)
 	defer arena.Free()
 
 	if len(os.Args) < 3 {
@@ -115,7 +115,7 @@ func main() {
 	fmt.Println(end)
 }
 
-func compute(filePath string, from int64, to int64, workerID int, workers int, arena *Arena, overflows mem.Slice[mem.Slice[byte]]) mem.Slice[*WeatherStationInfo] {
+func compute(filePath string, from int64, to int64, workerID int, workers int, arena *mem.Arena, overflows mem.Slice[mem.Slice[byte]]) mem.Slice[*WeatherStationInfo] {
 	if from == to {
 		return nil
 	}
@@ -193,7 +193,7 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 	return sortedValues(m, arena)
 }
 
-func sortedValues(m map[uint64]*WeatherStationInfo, arena *Arena) []*WeatherStationInfo {
+func sortedValues(m map[uint64]*WeatherStationInfo, arena *mem.Arena) []*WeatherStationInfo {
 	values := mem.NewSlice[*WeatherStationInfo](0, len(m), arena.AllocN)
 	for _, value := range m {
 		values.Append(nil, arena.AllocN, value)
@@ -203,7 +203,7 @@ func sortedValues(m map[uint64]*WeatherStationInfo, arena *Arena) []*WeatherStat
 	return values
 }
 
-func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *Arena) {
+func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *mem.Arena) {
 	var nextStart int
 	for i, b := range chunk {
 		if b == '\n' {
@@ -213,7 +213,7 @@ func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo,
 	}
 }
 
-func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *Arena) {
+func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *mem.Arena) {
 	if len(line) == 0 {
 		return
 	}
