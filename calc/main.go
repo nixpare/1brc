@@ -2,7 +2,6 @@ package main
 
 import (
 	"arena"
-	"bytes"
 	"errors"
 	"fmt"
 	"hash"
@@ -11,6 +10,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,7 +23,7 @@ const (
 )
 
 type WeatherStationInfo struct {
-	name  []byte
+	name  string
 	min   int16
 	max   int16
 	acc   int64
@@ -31,7 +31,7 @@ type WeatherStationInfo struct {
 }
 
 func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
-	return bytes.Compare(wsi.name, other.name)
+	return strings.Compare(wsi.name, other.name)
 }
 
 func main() {
@@ -259,7 +259,7 @@ loop:
 
 		wsi = arena.New[WeatherStationInfo](a)
 		*wsi = WeatherStationInfo{
-			name: name,
+			name: string(name),
 			min:  temp, max: temp,
 			acc: int64(temp), count: 1,
 		}
