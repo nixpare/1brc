@@ -1,6 +1,8 @@
 package main
 
 import (
+	"arena"
+	"bytes"
 	"errors"
 	"fmt"
 	"hash"
@@ -9,23 +11,19 @@ import (
 	"log"
 	"os"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
-	"github.com/nixpare/mem"
 	"github.com/nixpare/sorting"
 )
 
 const (
 	BUFFER_SIZE        = 1024 * 1024 * 4
 	WORKERS_MULTIPLIER = 20
-
-	ARENA_ALLOC uintptr = 1024 * 1024
 )
 
 type WeatherStationInfo struct {
-	name  mem.String
+	name  []byte
 	min   int16
 	max   int16
 	acc   int64
@@ -33,7 +31,7 @@ type WeatherStationInfo struct {
 }
 
 func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
-	return strings.Compare(string(wsi.name), string(other.name))
+	return bytes.Compare(wsi.name, other.name)
 }
 
 func main() {
@@ -41,8 +39,13 @@ func main() {
 
 	start := time.Now()
 
-	arena := mem.NewArena(ARENA_ALLOC)
-	defer arena.Free()
+	mainArena := arena.NewArena()
+	arenas := []*arena.Arena{ mainArena }
+	defer func(arenas *[]*arena.Arena) {
+		for _, a := range *arenas {
+			a.Free()
+		}
+	}(&arenas)
 
 	if len(os.Args) < 3 {
 		log.Fatalln("Required source and dest path")
@@ -75,8 +78,8 @@ func main() {
 		chunkSize = fileSize
 	}
 
-	partials := mem.NewSlice[mem.Slice[*WeatherStationInfo]](workers+1, workers+1, arena.AllocN)
-	overflows := mem.NewSlice[mem.Slice[byte]](workers*2-2, workers*2-2, arena.AllocN)
+	partials := arena.MakeSlice[[]*WeatherStationInfo](mainArena, workers+1, workers+1)
+	overflows := arena.MakeSlice[[]byte](mainArena, workers*2-2, workers*2-2)
 
 	var wg sync.WaitGroup
 	wg.Add(workers)
@@ -87,35 +90,38 @@ func main() {
 			to = fileSize
 		}
 
+		a := arena.NewArena()
+		arenas = append(arenas, a)
+
 		go func() {
 			defer wg.Done()
-			partials[i] = compute(inFilePath, from, to, i, workers, arena, overflows)
+			partials[i] = compute(inFilePath, from, to, i, workers, a, overflows)
 		}()
 	}
 	wg.Wait()
 
-	leftover := mem.NewSlice[byte](0, 128, arena.AllocN)
+	leftover := arena.MakeSlice[byte](mainArena, 0, 128)
 
 	for i := 0; i < len(overflows); i += 2 {
-		leftover.Append(nil, arena.AllocN, overflows[i]...)
-		leftover.Append(nil, arena.AllocN, overflows[i+1]...)
-		leftover.Append(nil, arena.AllocN, '\n')
+		leftover = append(leftover, overflows[i]...)
+		leftover = append(leftover, overflows[i+1]...)
+		leftover = append(leftover, '\n')
 	}
 
 	leftoverM := make(map[uint64]*WeatherStationInfo)
 	h := fnv.New64a()
 
-	computeChunk(leftover, h, leftoverM, arena)
-	partials[len(partials)-1] = sortedValues(leftoverM, arena)
+	computeChunk(leftover, h, leftoverM, mainArena)
+	partials[len(partials)-1] = sortedValues(leftoverM, mainArena)
 
-	result := mergeMatrix(mem.ToSliceMatrix(partials), arena)
+	result := mergeMatrix(partials, mainArena)
 	printResult(out, result)
 
 	end := time.Since(start)
 	fmt.Println(end)
 }
 
-func compute(filePath string, from int64, to int64, workerID int, workers int, arena *mem.Arena, overflows mem.Slice[mem.Slice[byte]]) mem.Slice[*WeatherStationInfo] {
+func compute(filePath string, from int64, to int64, workerID int, workers int, a *arena.Arena, overflows [][]byte) []*WeatherStationInfo {
 	if from == to {
 		return nil
 	}
@@ -134,8 +140,8 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 		panic(err)
 	}
 
-	buf := mem.NewSlice[byte](BUFFER_SIZE, BUFFER_SIZE, arena.AllocN)
-	leftover := mem.NewSlice[byte](0, 128, arena.AllocN)
+	buf := arena.MakeSlice[byte](a, BUFFER_SIZE, BUFFER_SIZE)
+	leftover := arena.MakeSlice[byte](a, 0, 128)
 
 	times := (to - from) / BUFFER_SIZE
 	var read int
@@ -161,13 +167,13 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 		}
 
 		if workerID != 0 && i == 0 {
-			o := mem.NewSlice[byte](firstLineIndex, firstLineIndex, arena.AllocN)
+			o := arena.MakeSlice[byte](a, firstLineIndex, firstLineIndex)
 			copy(o, buf[:firstLineIndex])
 
 			overflows[workerID*2-1] = o
 		} else {
 			leftover = append(leftover, buf[:firstLineIndex]...)
-			parseLine(leftover, h, m, arena)
+			parseLine(leftover, h, m, a)
 			leftover = leftover[:0]
 		}
 
@@ -179,7 +185,7 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 		}
 
 		if workerID != workers-1 && i == times {
-			o := mem.NewSlice[byte](len(buf)-lastLineIndex+1, len(buf)-lastLineIndex+1, arena.AllocN)
+			o := arena.MakeSlice[byte](a, len(buf)-lastLineIndex+1, len(buf)-lastLineIndex+1)
 			copy(o, buf[lastLineIndex+1:])
 
 			overflows[workerID*2] = o
@@ -187,33 +193,33 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 			leftover = append(leftover, buf[lastLineIndex+1:]...)
 		}
 
-		computeChunk(buf[firstLineIndex+1:lastLineIndex+1], h, m, arena)
+		computeChunk(buf[firstLineIndex+1:lastLineIndex+1], h, m, a)
 	}
 
-	return sortedValues(m, arena)
+	return sortedValues(m, a)
 }
 
-func sortedValues(m map[uint64]*WeatherStationInfo, arena *mem.Arena) []*WeatherStationInfo {
-	values := mem.NewSlice[*WeatherStationInfo](0, len(m), arena.AllocN)
+func sortedValues(m map[uint64]*WeatherStationInfo, a *arena.Arena) []*WeatherStationInfo {
+	values := arena.MakeSlice[*WeatherStationInfo](a, 0, len(m))
 	for _, value := range m {
-		values.Append(nil, arena.AllocN, value)
+		values = append(values, value)
 	}
 
 	sorting.Sort(values)
 	return values
 }
 
-func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *mem.Arena) {
+func computeChunk(chunk []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, a *arena.Arena) {
 	var nextStart int
 	for i, b := range chunk {
 		if b == '\n' {
-			parseLine(chunk[nextStart:i], h, m, arena)
+			parseLine(chunk[nextStart:i], h, m, a)
 			nextStart = i + 1
 		}
 	}
 }
 
-func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, arena *mem.Arena) {
+func parseLine(line []byte, h hash.Hash64, m map[uint64]*WeatherStationInfo, a *arena.Arena) {
 	if len(line) == 0 {
 		return
 	}
@@ -248,11 +254,12 @@ loop:
 
 	wsi, ok := m[nameHash]
 	if !ok {
-		name := string(line[:splitIndex])
-		wsi = mem.New[WeatherStationInfo](arena.Alloc)
+		name := arena.MakeSlice[byte](a, splitIndex, splitIndex)
+		copy(name, line[:splitIndex])
 
+		wsi = arena.New[WeatherStationInfo](a)
 		*wsi = WeatherStationInfo{
-			name: mem.StringFromGO(name, arena.AllocN),
+			name: name,
 			min:  temp, max: temp,
 			acc: int64(temp), count: 1,
 		}

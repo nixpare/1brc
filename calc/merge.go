@@ -1,14 +1,14 @@
 package main
 
-import "github.com/nixpare/mem"
+import "arena"
 
-func mergeMatrix(partials [][]*WeatherStationInfo, arena *mem.Arena) []*WeatherStationInfo {
+func mergeMatrix(partials [][]*WeatherStationInfo, a *arena.Arena) []*WeatherStationInfo {
 	var n int
 	for _, v := range partials {
 		n += len(v)
 	}
 
-	result := mem.NewSlice[*WeatherStationInfo](n, n, arena.AllocN)
+	result := arena.MakeSlice[*WeatherStationInfo](a, n, n)
 
 	for len(partials) > 1 {
 		var from int
