@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"runtime"
+	"runtime/pprof"
 	"strings"
 	"sync"
 	"time"
@@ -37,7 +38,19 @@ func (wsi *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
 }
 
 func main() {
-	defer fmt.Println("Finished successfully")
+	if len(os.Args) > 3 && os.Args[3] == "profile" {
+		f, err := os.Create("default.pgo")
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		err = pprof.StartCPUProfile(f)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		defer pprof.StopCPUProfile()
+	}
 
 	start := time.Now()
 
