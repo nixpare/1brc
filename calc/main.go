@@ -166,7 +166,7 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 
 			overflows[workerID*2-1] = o
 		} else {
-			leftover = append(leftover, buf[:firstLineIndex]...)
+			leftover.Append(nil, arena.AllocN, buf[:firstLineIndex]...)
 			parseLine(leftover, h, m, arena)
 			leftover = leftover[:0]
 		}
@@ -184,7 +184,7 @@ func compute(filePath string, from int64, to int64, workerID int, workers int, a
 
 			overflows[workerID*2] = o
 		} else {
-			leftover = append(leftover, buf[lastLineIndex+1:]...)
+			leftover.Append(nil, arena.AllocN, buf[lastLineIndex+1:]...)
 		}
 
 		computeChunk(buf[firstLineIndex+1:lastLineIndex+1], h, m, arena)
