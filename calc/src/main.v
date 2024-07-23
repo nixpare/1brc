@@ -1,3 +1,4 @@
+// v -prod -cg -skip-unused -fast-math -cflags -march=native -autofree run . ../measurements-x.txt ../result-x.txt
 module main
 
 import os
@@ -12,6 +13,7 @@ const (
     workers_multiplier = 1 //20
 )
 
+@[aligned]
 struct WeatherStationInfo {
 	name  string
 mut:
@@ -21,6 +23,7 @@ mut:
 	count i64
 }
 
+@[direct_array_access]
 fn main() {
 	start := time.now()
 
@@ -56,7 +59,7 @@ fn main() {
 	for i in 0..workers {
 		from := chunk_size * u64(i)
 		mut to := from + chunk_size
-		if to > file_size {
+		if _unlikely_(to > file_size) {
 			to = file_size
 		}
 
@@ -90,8 +93,9 @@ fn main() {
 	println(end.str())
 }
 
+@[direct_array_access]
 fn compute(filePath string, from i64, to i64, workerID int, workers int, mut overflows [][]u8) ![]&WeatherStationInfo {
-	if from == to {
+	if _unlikely_(from == to) {
 		return []&WeatherStationInfo{}
 	}
 
@@ -110,7 +114,7 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 
 	for i in 0 .. times + 1 {
 		mut size := i64(buffer_size)
-		if i == times && i64(read)+buffer_size > to-from {
+		if _unlikely_(i == times && i64(read)+buffer_size > to-from) {
 			size = to - from - i64(read)
 		}
 
@@ -124,7 +128,7 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 
 		mut first_line_index := 0
 		for {
-			if buf[first_line_index] == `\n` {
+			if _unlikely_(buf[first_line_index] == `\n`) {
 				break
 			}
 			first_line_index++
@@ -143,7 +147,7 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 
 		mut last_line_index := n - 1
 		for {
-			if buf[last_line_index] == `\n` {
+			if _unlikely_(buf[last_line_index] == `\n`) {
 				break
 			}
 			last_line_index--
@@ -164,6 +168,7 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 	return sorted_values(m)
 }
 
+@[direct_array_access]
 fn sorted_values(m map[u64]&WeatherStationInfo) []&WeatherStationInfo {
     mut values := []&WeatherStationInfo{ cap: m.len }
     for _, value in m {
@@ -174,18 +179,20 @@ fn sorted_values(m map[u64]&WeatherStationInfo) []&WeatherStationInfo {
     return values
 }
 
+@[direct_array_access]
 fn compute_chunk(chunk []u8, mut m map[u64]&WeatherStationInfo) {
 	mut next_start := 0
 	for i, b in chunk {
-		if b == `\n` {
+		if _unlikely_(b == `\n`) {
 			parse_line(chunk[next_start..i], mut m)
 			next_start = i + 1
 		}
 	}
 }
 
+@[direct_array_access]
 fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
-	if line.len == 0 {
+	if _unlikely_(line.len == 0) {
 		return
 	}
 
@@ -216,7 +223,8 @@ fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 		}
 	}
 	
-	if mut wsi := m[name_hash] {
+	mut wsi := unsafe { m[name_hash] }
+	if unsafe { _likely_(wsi != nil) } {
 		wsi.min = math.min(wsi.min, temp)
 		wsi.max = math.max(wsi.max, temp)
 		wsi.acc += i64(temp)
@@ -230,12 +238,13 @@ fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 	}
 }
 
+@[direct_array_access]
 fn print_result(mut out io.Writer, result []&WeatherStationInfo) ! {
 	out.write("{\n".bytes())!
 
 	mut first := true
 	for x in result {
-		if first {
+		if _unlikely_(first) {
 			first = false
 			out.write('\t${ x.name }=${ f32(x.min) / 10.0 : .1f }/${ f64(x.acc)/ 10.0 / f64(x.count) : .1f }/${ f32(x.max) / 10.0 : .1f }'.bytes())!
 		} else {

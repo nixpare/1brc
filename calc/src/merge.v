@@ -1,6 +1,6 @@
 module main
 
-@[manualfree]
+@[direct_array_access; manualfree]
 fn merge_matrix(_partials [][]&WeatherStationInfo) []&WeatherStationInfo {
 	mut partials := unsafe{ _partials }
 
@@ -34,6 +34,7 @@ fn merge_matrix(_partials [][]&WeatherStationInfo) []&WeatherStationInfo {
 	return partials[0]
 }
 
+@[direct_array_access]
 fn merge_matrix_into(a []&WeatherStationInfo, b []&WeatherStationInfo, mut into []&WeatherStationInfo) int {
 	mut i := 0
 	mut j := 0
