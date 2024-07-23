@@ -1,5 +1,7 @@
 *.txt
 
+# GO
+
 *.test
 *.out
 *.exe
@@ -10,3 +12,13 @@ vendor/
 *.pgo
 *.pprof
 *.prof
+
+# ZIG
+
+.zig-cache/
+zig-out/
+/release/
+/debug/
+/build/
+/build-*/
+/docgen_tmp/
