@@ -1,4 +1,4 @@
-// v -prod -cg -skip-unused -fast-math -cflags -march=native -autofree run . ../measurements-x.txt ../result-x.txt
+// v -prod -cg -skip-unused -fast-math -cflags -march=native -gc none run . ../measurements-x.txt ../result-x.txt
 module main
 
 import os
