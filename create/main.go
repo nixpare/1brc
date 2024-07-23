@@ -86,7 +86,7 @@ func main() {
                     wrote += copy(buf[wrote:], station.id)
                     buf[wrote] = ';'
                     wrote++
-                    wrote += copy(buf[wrote:], fmt.Sprintf("%3.1f", station.measurement()))
+                    wrote += copy(buf[wrote:], fmt.Sprintf("%.1f", station.measurement()))
                     buf[wrote] = '\n'
                     wrote++
 
