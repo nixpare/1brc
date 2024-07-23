@@ -19,10 +19,10 @@ import (
 )
 
 const (
-	BUFFER_SIZE        = 1024 * 1024 * 4
+	BUFFER_SIZE        = 1024 * 1024
 	WORKERS_MULTIPLIER = 20
 
-	ARENA_ALLOC uintptr = 1024 * 1024
+	ARENA_ALLOC uintptr = 1024
 )
 
 type WeatherStationInfo struct {
