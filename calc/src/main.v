@@ -39,7 +39,7 @@ fn main() {
 	workers := if file_size < buffer_size {
 		1
 	} else {
-		runtime.nr_cpus() * workers_multiplier + 2
+		runtime.nr_cpus() * workers_multiplier
 	}
 
 	chunk_size := if workers == 1 {
