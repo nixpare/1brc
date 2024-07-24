@@ -215,6 +215,7 @@ fn parseLine(line: []u8, map: *WSIHashMap, allocator: std.mem.Allocator) !void {
                 break :loop;
             },
             else => {
+                @setRuntimeSafety(false);
                 temp += @as(i16, line[i] - '0') * exp;
                 exp *= 10;
             },
