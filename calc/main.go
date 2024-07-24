@@ -54,7 +54,7 @@ func main() {
 
 	start := time.Now()
 
-	arena := mem.NewArena(ARENA_ALLOC)
+	arena := mem.NewArena(ARENA_ALLOC, mem.Free, mem.Malloc)
 	defer arena.Free()
 
 	if len(os.Args) < 3 {

@@ -4,6 +4,14 @@ github.com/nixpare/mem v1.0.0-beta.3 h1:ccGrJsu+b2HG1EdMkxYJQICDvroHRrTIam0eS69H
 github.com/nixpare/mem v1.0.0-beta.3/go.mod h1:mp2Je8q1t5sScZwF/kfJv2KSWOKpWCVpYqjo0a9kjdo=
 github.com/nixpare/mem v1.0.0-beta.4 h1:IsbH1Ksb98cqvnc0wTY9sgN13D+sut+9sYqbWzvussI=
 github.com/nixpare/mem v1.0.0-beta.4/go.mod h1:mp2Je8q1t5sScZwF/kfJv2KSWOKpWCVpYqjo0a9kjdo=
+github.com/nixpare/mem v1.0.0-beta.5 h1:rOhqF7ApFPdfsl2dputLIgK4CGS8sNmBTv45nsx6LGE=
+github.com/nixpare/mem v1.0.0-beta.5/go.mod h1:mp2Je8q1t5sScZwF/kfJv2KSWOKpWCVpYqjo0a9kjdo=
+github.com/nixpare/mem v1.0.0-beta.6 h1:AzZJpKj7JXcNkkDaLfS0SsGI+IFMWd1wZoI37WZDAUE=
+github.com/nixpare/mem v1.0.0-beta.6/go.mod h1:mp2Je8q1t5sScZwF/kfJv2KSWOKpWCVpYqjo0a9kjdo=
+github.com/nixpare/mem v1.0.0-beta.7 h1:tpMZySvKZnPdlKFStIb6ccOuKhZmdE9CU4/BpJUou0k=
+github.com/nixpare/mem v1.0.0-beta.7/go.mod h1:mp2Je8q1t5sScZwF/kfJv2KSWOKpWCVpYqjo0a9kjdo=
+github.com/nixpare/mem v1.0.0-beta.8 h1:GD/yYJQXKImmwZjTz6qlqjfDvtS2psGPreOAfksrrBI=
+github.com/nixpare/mem v1.0.0-beta.8/go.mod h1:mp2Je8q1t5sScZwF/kfJv2KSWOKpWCVpYqjo0a9kjdo=
 github.com/nixpare/sorting v1.1.0 h1:g/fMohZNpKxE4aMYhUyp3G+QmE2E7xg+7+zkgA1lgsQ=
 github.com/nixpare/sorting v1.1.0/go.mod h1:ToAvH9ogmuKTfuH2i/r1VRSt5k0DdGGQIRqAidn5KSM=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
