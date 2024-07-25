@@ -23,7 +23,7 @@ mut:
 	count i64
 }
 
-@[direct_array_access]
+@[direct_array_access; manualfree]
 fn main() {
 	start := time.now()
 
@@ -52,9 +52,12 @@ fn main() {
 	}
 
 	mut partials := [][]&WeatherStationInfo{ cap: workers+1 }
+	defer { unsafe { partials.free() } }
 	mut overflows := [][]u8{ len: workers*2 }
+	defer { unsafe { overflows.free() } }
 
 	mut threads := []thread ![]&WeatherStationInfo{ cap: workers }
+	defer { unsafe { threads.free() } }
 
 	for i in 0..workers {
 		from := chunk_size * u64(i)
@@ -72,6 +75,8 @@ fn main() {
 	}
 
 	mut leftover := []u8{ len: 0, cap: 128 }
+	defer { unsafe { leftover.free() } }
+
 	mut i := 0
 	for i < leftover.len {
 		leftover << overflows[i]
@@ -81,25 +86,38 @@ fn main() {
 		i += 2
 	}
 
+	for _, o_slice in overflows {
+		unsafe { o_slice.free() }
+	}
+
 	mut leftover_m := map[u64]&WeatherStationInfo{}
+	defer { unsafe { leftover_m.free() } }
 
 	compute_chunk(leftover, mut leftover_m)
 	partials << sorted_values(leftover_m)
 
-	result := merge_matrix(partials)
+	result := merge_matrix(mut partials)
+	defer { unsafe {
+		for _, wsi in result {
+			wsi.free()
+		}
+		result.free()
+	} }
+
 	print_result(mut out, result)!
 
 	end := time.since(start)
 	println(end.str())
 }
 
-@[direct_array_access]
+@[direct_array_access; manualfree]
 fn compute(filePath string, from i64, to i64, workerID int, workers int, mut overflows [][]u8) ![]&WeatherStationInfo {
 	if _unlikely_(from == to) {
 		return []&WeatherStationInfo{}
 	}
 
 	mut m := map[u64]&WeatherStationInfo{}
+	defer { unsafe { m.free() } }
 
 	mut f := os.open_file(filePath, "r", 0)!
 	defer { f.close() }
@@ -107,7 +125,10 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 	f.seek(from, .start)!
 
 	mut buf := []u8{ len: buffer_size }
+	defer { unsafe { buf.free() } }
+
 	mut leftover := []u8{ len: 0, cap: 128 }
+	defer { unsafe { leftover.free() } }
 
 	times := (to - from) / buffer_size
 	mut read := 0
@@ -135,7 +156,7 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 		}
 
 		if workerID != 0 && i == 0 {
-			mut o := []u8{ len: first_line_index }
+			mut o := []u8{ len: first_line_index } // freed in main inside overflows
 			copy(mut o, buf[..first_line_index])
 
 			overflows[workerID*2-1] = o
@@ -154,7 +175,7 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 		}
 
 		if workerID != workers-1 && i == times {
-			mut o := []u8{ len: buf.len-last_line_index+1 }
+			mut o := []u8{ len: buf.len-last_line_index+1 } // freed in main inside overflows
 			copy(mut o, buf[last_line_index+1..])
 
 			overflows[workerID*2] = o
@@ -168,18 +189,18 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 	return sorted_values(m)
 }
 
-@[direct_array_access]
+@[direct_array_access; manualfree]
 fn sorted_values(m map[u64]&WeatherStationInfo) []&WeatherStationInfo {
-    mut values := []&WeatherStationInfo{ cap: m.len }
+    mut values := []&WeatherStationInfo{ cap: m.len } // freed in main inside partials
     for _, value in m {
-        values << value 
+        values << value
     }
 
 	values.sort(a.name < b.name)
     return values
 }
 
-@[direct_array_access]
+@[direct_array_access; manualfree]
 fn compute_chunk(chunk []u8, mut m map[u64]&WeatherStationInfo) {
 	mut next_start := 0
 	for i, b in chunk {
@@ -190,7 +211,7 @@ fn compute_chunk(chunk []u8, mut m map[u64]&WeatherStationInfo) {
 	}
 }
 
-@[direct_array_access]
+@[direct_array_access; manualfree]
 fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 	if _unlikely_(line.len == 0) {
 		return
@@ -223,22 +244,23 @@ fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 		}
 	}
 	
-	mut wsi := unsafe { m[name_hash] }
-	if unsafe { _likely_(wsi != nil) } {
-		wsi.min = math.min(wsi.min, temp)
-		wsi.max = math.max(wsi.max, temp)
-		wsi.acc += i64(temp)
-		wsi.count++
-	} else {
-		m[name_hash] = &WeatherStationInfo{
+	mut wsi := m[name_hash] or {
+		m[name_hash] = &WeatherStationInfo{     // freed in main inside result or in merge
 			name: line[..split_idx].bytestr(),
 			min:  temp, max: temp,
 			acc: i64(temp), count: 1,
 		}
+
+		return
 	}
+	
+	wsi.min = math.min(wsi.min, temp)
+	wsi.max = math.max(wsi.max, temp)
+	wsi.acc += i64(temp)
+	wsi.count++
 }
 
-@[direct_array_access]
+@[direct_array_access; manualfree]
 fn print_result(mut out io.Writer, result []&WeatherStationInfo) ! {
 	out.write("{\n".bytes())!
 
