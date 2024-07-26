@@ -7,11 +7,18 @@ fn merge_matrix(mut partials [][]&WeatherStationInfo) []&WeatherStationInfo {
 		n += v.len
 	}
 
-	mut result := unsafe{ []&WeatherStationInfo{ len: n } }
+	mut result := unsafe{ []&WeatherStationInfo{ len: n*2 } }
 
 	mut len := partials.len
+	mut from_result := 0
+	mut first := true
 	for len > 1 {
-		mut from_result := 0
+		if from_result > n {
+			from_result = 0
+		} else {
+			from_result = n
+		}
+		
 		for i := 0; i+1 < len; i += 2 {
 			a := partials[i]
 			b := partials[i+1]
@@ -19,10 +26,14 @@ fn merge_matrix(mut partials [][]&WeatherStationInfo) []&WeatherStationInfo {
 
 			actual_length := merge_matrix_into(a, b, mut result[from_result..from_result+length])
 
-			/* unsafe {
-				partials[i].free()
-				partials[i+1].free()
-			} */
+			if first {
+				first = false
+				unsafe {
+					partials[i].free()
+					partials[i+1].free()
+				}
+			}
+			
 			partials[i/2] = result[from_result..from_result+actual_length]
 			from_result += actual_length
 		}
@@ -69,7 +80,7 @@ fn merge_matrix_into(a []&WeatherStationInfo, b []&WeatherStationInfo, mut into 
 				x.count += y.count
 
 				into[k] = x
-				//unsafe { free(y) }
+				unsafe { free(y) }
 
 				i++; j++
 			}
