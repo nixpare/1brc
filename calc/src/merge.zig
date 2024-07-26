@@ -11,15 +11,12 @@ pub fn mergeMatrix(_partials: [][]*WeatherStationInfo, allocator: std.mem.Alloca
 
     const result = try allocator.alloc(*WeatherStationInfo, n * 2);
 
-    var shift: bool = false;
     var from: usize = 0;
     while (partials.len > 1) {
-        if (shift) {
-            from = n;
-            shift = false;
-        } else {
+        if (from > n) {
             from = 0;
-            shift = true;
+        } else {
+            from = n;
         }
 
         var i: usize = 0;
