@@ -27,7 +27,17 @@ Run procedure:
 + First run: `go build -o calc.exe && .\calc.exe ..\measurements-x.txt ..\result-x.txt profile`
 + Second run: `go build -o calc.exe && .\calc.exe ..\measurements-x.txt ..\result-x.txt`
 
-### 3) Go -> 6.69 seconds (branch `go-arena`)
+### 3) V Lang -> 6.50 seconds (branch `vlang`)
+Always reaching close to 6.5s. V is version `0.4.6 4c30d35`, with garbage collector disabled and manual memory management
+enabled, plus other optimizations. Everything was not allocated with arenas and was deallocated as soon as possible.
+
+Memory usage: Undefined (TaskManager was showing ~ 12.5 MB during the entire run, which is impossible)
+
+Run procedure:
++ Build step: `v -prod -cg -skip-unused -fast-math -cflags -march=native -gc none -manualfree -o calc.exe .`
++ Run: `.\calc.exe ..\measurements-x.txt ..\result-x.txt`
+
+### 4) Go -> 6.69 seconds (branch `go-arena`)
 Reached 6.69s after a profile run, which ran in 7.65s. Go is version 1.22.4 with the arena
 experimental feature enabled. Every slice and heap object is created with the arena.
 
