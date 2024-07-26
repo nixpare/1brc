@@ -17,7 +17,17 @@ Run procedure:
 + First run: `go build -o calc.exe && .\calc.exe ..\measurements-x.txt ..\result-x.txt profile`
 + Second run: `go build -o calc.exe && .\calc.exe ..\measurements-x.txt ..\result-x.txt`
 
-### 2) Go -> 6.8 seconds (branch `manual-mem`)
+### 2) Go -> 6.69 seconds (branch `go-arena`)
+Reached 6.69s after a profile run, which ran in 7.65s. Go is version 1.22.4 with the arena
+experimental feature enabled. Every slice and heap object is created with the arena.
+
+Memory usage: ~ 2 GB
+
+No difference even with the profile run:
++ First run: `go build -o calc.exe && .\calc.exe ..\measurements-x.txt ..\result-x.txt profile`
++ Second run: `go build -o calc.exe && .\calc.exe ..\measurements-x.txt ..\result-x.txt`
+
+### 3) Go -> 6.8 seconds (branch `manual-mem`)
 A lot of variation, between 6.8s and 7.8s. Go is as standard as it can be, version 1.22.4, but every slice, string and
 heap object was created and managed by an arena allocator based on GLibc `malloc`, profided by the package `github.com/nixpare/mem`.
 
