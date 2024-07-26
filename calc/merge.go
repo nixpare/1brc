@@ -10,7 +10,7 @@ func mergeMatrix(partials [][]*WeatherStationInfo) []*WeatherStationInfo {
 
 	var from int
 	for len(partials) > 1 {
-		if from > n {
+		if from >= n {
 			from = 0
 		} else {
 			from = n
@@ -20,10 +20,10 @@ func mergeMatrix(partials [][]*WeatherStationInfo) []*WeatherStationInfo {
 			a, b := partials[i], partials[i+1]
 			length := len(a) + len(b)
 
-			actuaLength := mergeMatrixInto(a, b, result[from:from+length])
+			actualLength := mergeMatrixInto(a, b, result[from:from+length])
 
-			partials[i/2] = result[from:from+actuaLength]
-			from += actuaLength
+			partials[i/2] = result[from : from+actualLength]
+			from += actualLength
 		}
 
 		if len(partials) % 2 == 1 {
@@ -40,17 +40,17 @@ func mergeMatrix(partials [][]*WeatherStationInfo) []*WeatherStationInfo {
 func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*WeatherStationInfo) int {
 	var i, j, k int
 	for ; i < len(a) && j < len(b); k++ {
-		x := a[i]
-		y := b[j]
-
-		switch x.Compare(y) {
+		switch a[i].Compare(b[j]) {
 		case -1:
-			into[k] = x
+			into[k] = a[i]
 			i++
 		case 1:
-			into[k] = y
+			into[k] = b[j]
 			j++
 		case 0:
+			x := a[i]
+			y := b[j]
+
 			if y.min < x.min {
 				x.min = y.min
 			}
@@ -61,7 +61,6 @@ func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*W
 			x.count += y.count
 
 			into[k] = x
-
 			i++; j++
 		}
 	}

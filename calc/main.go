@@ -48,7 +48,7 @@ func main() {
 
 		defer pprof.StopCPUProfile()
 	}
-
+	
 	start := time.Now()
 
 	if len(os.Args) < 3 {
@@ -61,7 +61,7 @@ func main() {
 	}
 	defer out.Close()
 
-	inFilePath := os.Args[1]
+    inFilePath := os.Args[1]
 
 	inInfo, err := os.Stat(inFilePath)
 	if err != nil {
@@ -101,12 +101,12 @@ func main() {
 	}
 	wg.Wait()
 
-	leftover := make([]byte, 0, 128)
-	for i := 0; i < len(overflows); i += 2 {
-		leftover = append(leftover, overflows[i]...)
-		leftover = append(leftover, overflows[i+1]...)
-		leftover = append(leftover, '\n')
-	}
+    leftover := make([]byte, 0, 128)
+    for i := 0; i < len(overflows); i += 2 {
+        leftover = append(leftover, overflows[i]...)
+        leftover = append(leftover, overflows[i+1]...)
+        leftover = append(leftover, '\n')
+    }
 
 	leftoverM := make(map[uint64]*WeatherStationInfo)
 	h := fnv.New64a()
