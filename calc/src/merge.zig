@@ -2,17 +2,25 @@ const std = @import("std");
 const WeatherStationInfo = @import("main.zig").WeatherStationInfo;
 
 pub fn mergeMatrix(_partials: [][]*WeatherStationInfo, allocator: std.mem.Allocator) ![]*WeatherStationInfo {
-	var partials = _partials;
+    var partials = _partials;
 
     var n: usize = 0;
     for (partials) |p| {
         n += p.len;
     }
 
-    const result = try allocator.alloc(*WeatherStationInfo, n);
+    const result = try allocator.alloc(*WeatherStationInfo, n * 2);
 
+    var shift: bool = false;
+    var from: usize = 0;
     while (partials.len > 1) {
-        var from: usize = 0;
+        if (shift) {
+            from = n;
+            shift = false;
+        } else {
+            from = 0;
+            shift = true;
+        }
 
         var i: usize = 0;
         while (i + 1 < partials.len) : (i += 2) {
@@ -26,12 +34,11 @@ pub fn mergeMatrix(_partials: [][]*WeatherStationInfo, allocator: std.mem.Alloca
             from += finalLength;
         }
 
-        const oldLen = partials.len;
-        if (oldLen % 2 == 1) {
-            partials[oldLen / 2 + 1] = partials[oldLen - 1];
-            partials = partials[0 .. oldLen / 2 + 1];
+        if (i < partials.len) {
+            partials[i / 2] = partials[i];
+            partials = partials[0 .. partials.len / 2 + 1];
         } else {
-            partials = partials[0 .. oldLen / 2];
+            partials = partials[0 .. partials.len / 2];
         }
     }
 
