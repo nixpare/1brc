@@ -40,19 +40,12 @@ pub fn main() !void {
     const start = try std.time.Instant.now();
     defer printEnd(start) catch @panic("Failed to get or print end time");
 
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    var arenas = try std.ArrayList(std.heap.ArenaAllocator).initCapacity(std.heap.page_allocator, 1);
-    try arenas.append(arena);
-    defer {
-        for (arenas.items) |a| {
-            a.deinit();
-        }
-    }
+    var heapAllocator = std.heap.HeapAllocator.init();
+    defer heapAllocator.deinit();
+    var safeAllocator = std.heap.ThreadSafeAllocator{ .child_allocator = heapAllocator.allocator() };
+    const allocator = safeAllocator.allocator();
 
-    const arenaAlloc = arena.allocator();
-
-    const args = try std.process.argsAlloc(arenaAlloc);
-    defer std.process.argsFree(arenaAlloc, args);
+    const args = try std.process.argsAlloc(allocator);
 
     if (args.len < 3) {
         try std.io.getStdErr().writeAll("Usage: calc <input file> <output file>\n");
@@ -69,9 +62,9 @@ pub fn main() !void {
     const workers = if (fileSize < BUFFER_SIZE) 1 else try std.Thread.getCpuCount();
     const chunkSize = if (workers == 1) fileSize else fileSize / (workers - 1);
 
-    var partials = try arenaAlloc.alloc([]*WeatherStationInfo, workers + 1);
-    const overflows = try arenaAlloc.alloc([]u8, workers * 2 - 2);
-    const threads = try arenaAlloc.alloc(std.Thread, workers);
+    var partials = try allocator.alloc([]*WeatherStationInfo, workers + 1);
+    const overflows = try allocator.alloc([]u8, workers * 2 - 2);
+    const threads = try allocator.alloc(std.Thread, workers);
 
     for (0..workers) |i| {
         const from = i * chunkSize;
@@ -80,17 +73,14 @@ pub fn main() !void {
             to = fileSize;
         }
 
-        const threadArena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-        try arenas.append(threadArena);
-
-        threads[i] = try std.Thread.spawn(.{ .allocator = arenaAlloc }, computeThread, .{ inputFile, from, to, i, workers, partials, overflows, &arenas.items[arenas.items.len - 1] });
+        threads[i] = try std.Thread.spawn(.{ .allocator = allocator }, computeThread, .{ inputFile, from, to, i, workers, partials, overflows, allocator });
     }
 
     for (threads) |thread| {
         thread.join();
     }
 
-    var leftover = try std.ArrayList(u8).initCapacity(arenaAlloc, 128);
+    var leftover = try std.ArrayList(u8).initCapacity(allocator, 128);
     var i: usize = 0;
     while (i < overflows.len) : (i += 2) {
         try leftover.appendSlice(overflows[i]);
@@ -98,17 +88,16 @@ pub fn main() !void {
         try leftover.append('\n');
     }
 
-    var leftoverMap = WSIHashMap.init(arenaAlloc);
-    try computeChunk(leftover.items, &leftoverMap, arenaAlloc);
+    var leftoverMap = WSIHashMap.init(allocator);
+    try computeChunk(leftover.items, &leftoverMap, allocator);
 
-    partials[partials.len - 1] = try sortedValues(&leftoverMap, arenaAlloc);
+    partials[partials.len - 1] = try sortedValues(&leftoverMap, allocator);
 
-    const result = try merge.mergeMatrix(partials, arenaAlloc);
+    const result = try merge.mergeMatrix(partials, allocator);
     try printResult(&out, result);
 }
 
-fn computeThread(inputFile: []u8, from: usize, to: usize, i: usize, workers: usize, partials: [][]*WeatherStationInfo, overflows: [][]u8, arena: *std.heap.ArenaAllocator) !void {
-    const allocator = arena.allocator();
+fn computeThread(inputFile: []u8, from: usize, to: usize, i: usize, workers: usize, partials: [][]*WeatherStationInfo, overflows: [][]u8, allocator: std.mem.Allocator) !void {
     partials[i] = try compute(inputFile, from, to, i, workers, overflows, allocator);
 }
 
@@ -134,7 +123,7 @@ fn compute(filePath: []u8, from: usize, to: usize, workerID: usize, workers: usi
             size = to - from - read;
         }
 
-        const n = try file.readAll(buffer);
+        const n = try file.read(buffer);
         read += n;
 
         var firstLineIndex: usize = 0;
@@ -232,6 +221,9 @@ fn parseLine(line: []u8, map: *WSIHashMap, allocator: std.mem.Allocator) !void {
         const wsi = try allocator.create(WeatherStationInfo);
         const wsiName = try allocator.alloc(u8, splitIndex);
         std.mem.copyForwards(u8, wsiName, line[0..splitIndex]);
+
+        if (wsiName.len == 0)
+            std.debug.print("Empty name\n", .{});
 
         wsi.* = .{ .name = wsiName, .min = temp, .max = temp, .acc = temp, .count = 1 };
         try map.put(nameHash, wsi);
