@@ -35,6 +35,7 @@ func (w *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
 }
 
 func main() {
+    defer time.Sleep(time.Second * 5)
 	if len(os.Args) > 3 && os.Args[3] == "profile" {
 		f, err := os.Create("default.pgo")
 		if err != nil {
@@ -100,7 +101,7 @@ func main() {
     }
     wg.Wait()
 
-    leftover := make([]byte, 0)
+    leftover := make([]byte, 0, 128)
     for i := 0; i < len(overflows); i += 2 {
         leftover = append(leftover, overflows[i]...)
         leftover = append(leftover, overflows[i+1]...)
