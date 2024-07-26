@@ -35,7 +35,6 @@ func (w *WeatherStationInfo) Compare(other *WeatherStationInfo) int {
 }
 
 func main() {
-    defer time.Sleep(time.Second * 5)
 	if len(os.Args) > 3 && os.Args[3] == "profile" {
 		f, err := os.Create("default.pgo")
 		if err != nil {
@@ -56,13 +55,13 @@ func main() {
 		log.Fatalln("Required source and dest path")
 	}
 
-	out, err := os.Create(os.Args[len(os.Args)-1])
+	out, err := os.Create(os.Args[2])
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer out.Close()
 
-    inFilePath := os.Args[len(os.Args)-2]
+    inFilePath := os.Args[1]
 
     inInfo, err := os.Stat(inFilePath)
     if err != nil {
