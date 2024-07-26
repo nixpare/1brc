@@ -244,20 +244,18 @@ fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 		}
 	}
 	
-	mut wsi := m[name_hash] or {
+	if mut wsi := m[name_hash] {
+		wsi.min = math.min(wsi.min, temp)
+		wsi.max = math.max(wsi.max, temp)
+		wsi.acc += i64(temp)
+		wsi.count++
+	} else {
 		m[name_hash] = &WeatherStationInfo{     // freed in main inside result or in merge
 			name: line[..split_idx].bytestr(),
 			min:  temp, max: temp,
 			acc: i64(temp), count: 1,
 		}
-
-		return
 	}
-	
-	wsi.min = math.min(wsi.min, temp)
-	wsi.max = math.max(wsi.max, temp)
-	wsi.acc += i64(temp)
-	wsi.count++
 }
 
 @[direct_array_access; manualfree]
