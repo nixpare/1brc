@@ -8,26 +8,31 @@ func mergeMatrix(partials [][]*WeatherStationInfo, a *arena.Arena) []*WeatherSta
 		n += len(v)
 	}
 
-	result := arena.MakeSlice[*WeatherStationInfo](a, n, n)
+	result := arena.MakeSlice[*WeatherStationInfo](a, n*2, n*2)
 
+	var from int
 	for len(partials) > 1 {
-		var from int
+		if from >= n {
+			from = 0
+		} else {
+			from = n
+		}
+
 		for i := 0; i+1 < len(partials); i += 2 {
 			a, b := partials[i], partials[i+1]
 			length := len(a) + len(b)
 
-			n := mergeMatrixInto(a, b, result[from:from+length])
+			actualLength := mergeMatrixInto(a, b, result[from:from+length])
 
-			partials[i/2] = result[from : from+n]
-			from += length
+			partials[i/2] = result[from : from+actualLength]
+			from += actualLength
 		}
 
-		oldLen := len(partials)
-		if oldLen%2 == 1 {
-			partials[oldLen/2+1] = partials[oldLen-1]
-			partials = partials[:oldLen/2+1]
+		if len(partials)%2 == 1 {
+			partials[len(partials)/2] = partials[len(partials)-1]
+			partials = partials[:len(partials)/2+1]
 		} else {
-			partials = partials[:oldLen/2]
+			partials = partials[:len(partials)/2]
 		}
 	}
 
@@ -36,7 +41,7 @@ func mergeMatrix(partials [][]*WeatherStationInfo, a *arena.Arena) []*WeatherSta
 
 func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*WeatherStationInfo) int {
 	var i, j, k int
-	for i < len(a) && j < len(b) {
+	for ; i < len(a) && j < len(b); k++ {
 		x := a[i]
 		y := b[j]
 
@@ -62,8 +67,6 @@ func mergeMatrixInto(a []*WeatherStationInfo, b []*WeatherStationInfo, into []*W
 			i++
 			j++
 		}
-
-		k++
 	}
 
 	for i < len(a) {
