@@ -1,4 +1,4 @@
-// v -prod -cg -skip-unused -fast-math -cflags -march=native -gc none -manualfree run . ../measurements-x.txt ../result-x.txt
+// v -prod -skip-unused -fast-math -no-bounds-checking -cflags -march=native -gc none run . ../measurements-x.txt ../result-x.txt
 module main
 
 import os
@@ -23,9 +23,12 @@ mut:
 	count i64
 }
 
-@[direct_array_access; manualfree]
 fn main() {
 	start := time.now()
+	defer {
+		end := time.since(start)
+		println(end.str())
+	}
 
 	if os.args.len < 3 {
 		eprintln("Required source and dest path")
@@ -105,12 +108,8 @@ fn main() {
 	} }
 
 	print_result(mut out, result)!
-
-	end := time.since(start)
-	println(end.str())
 }
 
-@[direct_array_access; manualfree]
 fn compute(filePath string, from i64, to i64, workerID int, workers int, mut overflows [][]u8) ![]&WeatherStationInfo {
 	if from == to {
 		return []&WeatherStationInfo{}
@@ -189,7 +188,6 @@ fn compute(filePath string, from i64, to i64, workerID int, workers int, mut ove
 	return sorted_values(m)
 }
 
-@[direct_array_access; manualfree]
 fn sorted_values(m map[u64]&WeatherStationInfo) []&WeatherStationInfo {
     mut values := []&WeatherStationInfo{ cap: m.len } // freed in main inside partials
     for _, value in m {
@@ -200,7 +198,6 @@ fn sorted_values(m map[u64]&WeatherStationInfo) []&WeatherStationInfo {
     return values
 }
 
-@[direct_array_access; manualfree]
 fn compute_chunk(chunk []u8, mut m map[u64]&WeatherStationInfo) {
 	mut next_start := 0
 	for i, b in chunk {
@@ -211,7 +208,6 @@ fn compute_chunk(chunk []u8, mut m map[u64]&WeatherStationInfo) {
 	}
 }
 
-@[direct_array_access; manualfree]
 fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 	if line.len == 0 {
 		return
@@ -258,7 +254,6 @@ fn parse_line(line []u8, mut m map[u64]&WeatherStationInfo) {
 	}
 }
 
-@[direct_array_access; manualfree]
 fn print_result(mut out io.Writer, result []&WeatherStationInfo) ! {
 	out.write("{\n".bytes())!
 

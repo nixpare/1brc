@@ -1,6 +1,5 @@
 module main
 
-@[direct_array_access; manualfree]
 fn merge_matrix(mut partials [][]&WeatherStationInfo) []&WeatherStationInfo {
 	mut n := 0
 	for v in partials {
@@ -49,7 +48,6 @@ fn merge_matrix(mut partials [][]&WeatherStationInfo) []&WeatherStationInfo {
 	return partials[0]
 }
 
-@[direct_array_access; manualfree]
 fn merge_matrix_into(a []&WeatherStationInfo, b []&WeatherStationInfo, mut into []&WeatherStationInfo) int {
 	mut i := 0
 	mut j := 0
@@ -59,8 +57,7 @@ fn merge_matrix_into(a []&WeatherStationInfo, b []&WeatherStationInfo, mut into 
 		mut x := a[i]
 		y := b[j]
 
-		cmp := compare_strings(x.name, y.name)
-		match cmp {
+		match compare_strings(x.name, y.name) {
 			-1 {
 				into[k] = x
 				i++
